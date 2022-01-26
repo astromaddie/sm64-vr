@@ -4,8 +4,10 @@ import re
 rejects = ""
 integer_types = ["u8", "u16", "u32", "u64", "s8", "s16", "s32", "s64", "int"]
 number_types = ["f32", "float"]
+smlua_functions_autogen_c = 'src/pc/lua/smlua_functions_autogen.c'
+
 cobject_types = ["struct MarioState*", "struct Object*", "struct Surface*"]
-cobject_lot_types = ["LOT_MARIO_STATE", "LOT_OBJECT", "LOT_SURFACE"]
+cobject_lot_types = ["LOT_MARIOSTATE", "LOT_OBJECT", "LOT_SURFACE"]
 param_override_build = {}
 
 ###########################################################
@@ -275,7 +277,7 @@ def process_files():
 
 def main():
     process_files()
-    filename = os.path.dirname(os.path.realpath(__file__)) + '/../src/pc/lua/smlua_functions_autogen.c'
+    filename = os.path.dirname(os.path.realpath(__file__)) + '/../' + smlua_functions_autogen_c
     with open(filename, 'w') as out:
         out.write(template.replace("$[FUNCTIONS]", built_functions).replace("$[BINDS]", built_binds))
     print('REJECTS:')
