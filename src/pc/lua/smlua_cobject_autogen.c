@@ -340,7 +340,7 @@ static struct LuaObjectField sBehaviorTrajectoriesFields[LUA_BEHAVIOR_TRAJECTORI
     { "UnagiTrajectory",               LVT_TRAJECTORY_P, offsetof(struct BehaviorTrajectories, UnagiTrajectory),               false, LOT_POINTER, 1, sizeof(Trajectory*) },
 };
 
-#define LUA_BEHAVIOR_VALUES_FIELD_COUNT 32
+#define LUA_BEHAVIOR_VALUES_FIELD_COUNT 33
 static struct LuaObjectField sBehaviorValuesFields[LUA_BEHAVIOR_VALUES_FIELD_COUNT] = {
     { "BowlingBallBob2Speed",     LVT_F32,     offsetof(struct BehaviorValues, BowlingBallBob2Speed),     false, LOT_NONE,                 1, sizeof(f32)                         },
     { "BowlingBallBobSpeed",      LVT_F32,     offsetof(struct BehaviorValues, BowlingBallBobSpeed),      false, LOT_NONE,                 1, sizeof(f32)                         },
@@ -361,6 +361,7 @@ static struct LuaObjectField sBehaviorValuesFields[LUA_BEHAVIOR_VALUES_FIELD_COU
     { "MipsStar1Requirement",     LVT_S16,     offsetof(struct BehaviorValues, MipsStar1Requirement),     false, LOT_NONE,                 1, sizeof(s16)                         },
     { "MipsStar2Requirement",     LVT_S16,     offsetof(struct BehaviorValues, MipsStar2Requirement),     false, LOT_NONE,                 1, sizeof(s16)                         },
     { "MultipleCapCollection",    LVT_U8,      offsetof(struct BehaviorValues, MultipleCapCollection),    false, LOT_NONE,                 1, sizeof(u8)                          },
+    { "ProcessLODs",              LVT_U8,      offsetof(struct BehaviorValues, ProcessLODs),              false, LOT_NONE,                 1, sizeof(u8)                          },
     { "RacingPenguinBigHeight",   LVT_F32,     offsetof(struct BehaviorValues, RacingPenguinBigHeight),   false, LOT_NONE,                 1, sizeof(f32)                         },
     { "RacingPenguinBigRadius",   LVT_F32,     offsetof(struct BehaviorValues, RacingPenguinBigRadius),   false, LOT_NONE,                 1, sizeof(f32)                         },
     { "RacingPenguinHeight",      LVT_F32,     offsetof(struct BehaviorValues, RacingPenguinHeight),      false, LOT_NONE,                 1, sizeof(f32)                         },

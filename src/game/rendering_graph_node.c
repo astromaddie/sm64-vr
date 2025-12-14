@@ -16,11 +16,12 @@
 #include "pc/lua/smlua_hooks.h"
 #include "pc/utils/misc.h"
 #include "pc/debuglog.h"
-#include "game/skybox.h"
-#include "game/first_person_cam.h"
+#include "skybox.h"
+#include "first_person_cam.h"
 #include "course_table.h"
 #include "skybox.h"
 #include "mario.h"
+#include "hardcoded.h"
 
 /**
  * This file contains the code that processes the scene graph for rendering.
@@ -633,8 +634,8 @@ static void geo_process_perspective(struct GraphNodePerspective *node) {
  * range of this node.
  */
 static void geo_process_level_of_detail(struct GraphNodeLevelOfDetail *node) {
-    // We assume modern hardware is powerful enough to draw the most detailed variant
-    s16 distanceFromCam = 0;
+    Mtx *mtx = gMatStackFixed[gMatStackIndex];
+    s16 distanceFromCam = gBehaviorValues.ProcessLODs ? (s32) -mtx->m[3][2] : 0; // z-component of the translation column
 
     if (node->minDistance <= distanceFromCam && distanceFromCam < node->maxDistance) {
         if (node->node.children != 0) {

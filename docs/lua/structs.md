@@ -336,6 +336,7 @@
 | RespawnShellBoxes | `integer` |  |
 | MultipleCapCollection | `integer` |  |
 | InfiniteRenderDistance | `integer` |  |
+| ProcessLODs | `integer` |  |
 | CourtyardBoosRequirement | `integer` |  |
 | starsNeededForDialog | [StarsNeededForDialog](structs.md#StarsNeededForDialog) | read-only |
 | dialogs | [BehaviorDialogs](structs.md#BehaviorDialogs) | read-only |

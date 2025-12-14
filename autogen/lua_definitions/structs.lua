@@ -195,6 +195,7 @@
 --- @field public RespawnShellBoxes integer
 --- @field public MultipleCapCollection integer
 --- @field public InfiniteRenderDistance integer
+--- @field public ProcessLODs integer
 --- @field public CourtyardBoosRequirement integer
 --- @field public starsNeededForDialog StarsNeededForDialog
 --- @field public dialogs BehaviorDialogs
