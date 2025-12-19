@@ -693,12 +693,10 @@ s32 act_debug_free_move(struct MarioState *m) {
 
     struct Surface *surf = NULL;
     f32 floorHeight = find_floor(pos[0], pos[1], pos[2], &surf);
-    if (surf != NULL) {
-        if (pos[1] < floorHeight) {
-            pos[1] = floorHeight;
-        }
-        vec3f_copy(m->pos, pos);
+    if (pos[1] < floorHeight) {
+        pos[1] = floorHeight;
     }
+    vec3f_copy(m->pos, pos);
 
     m->faceAngle[1] = m->intendedYaw;
     vec3f_copy(m->marioObj->header.gfx.pos, m->pos);

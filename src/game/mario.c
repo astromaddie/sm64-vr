@@ -1543,6 +1543,8 @@ void update_mario_geometry_inputs(struct MarioState *m) {
     gasLevel = find_poison_gas_level(m->pos[0], m->pos[2]);
     m->waterLevel = find_water_level(m->pos[0], m->pos[2]);
 
+    if (m->action == ACT_DEBUG_FREE_MOVE) { return; }
+
     if (m->floor != NULL) {
         m->floorAngle = atan2s(m->floor->normal.z, m->floor->normal.x);
         m->terrainSoundAddend = mario_get_terrain_sound_addend(m);
@@ -2059,7 +2061,7 @@ s32 execute_mario_action(UNUSED struct Object *o) {
         }
 
         // If Mario is OOB, stop executing actions.
-        if (gMarioState->floor == NULL) {
+        if (gMarioState->floor == NULL && gMarioState->action != ACT_DEBUG_FREE_MOVE) {
             return 0;
         }
 
