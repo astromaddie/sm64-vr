@@ -118,7 +118,7 @@ override_field_immutable = {
     "GlobalObjectAnimations": [ "*"],
     "SpawnParticlesInfo": [ "model" ],
     "WaterDropletParams": [ "model" ],
-    "MarioBodyState": [ "updateTorsoTime", "updateHeadPosTime", "animPartsPos", "currAnimPart" ],
+    "MarioBodyState": [ "updateTorsoTime", "updateHeadPosTime", "animPartsPos", "animPartsRot", "currAnimPart" ],
     "Area": [ "localAreaTimer", "nextSyncID", "objectSpawnInfos", "paintingWarpNodes", "warpNodes" ],
     "Mod": [ "*" ],
     "ModFile": [ "*" ],

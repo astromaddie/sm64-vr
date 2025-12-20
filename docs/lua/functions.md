@@ -2031,6 +2031,7 @@
    - [get_hand_foot_pos_y](functions-7.md#get_hand_foot_pos_y)
    - [get_hand_foot_pos_z](functions-7.md#get_hand_foot_pos_z)
    - [get_mario_anim_part_pos](functions-7.md#get_mario_anim_part_pos)
+   - [get_mario_anim_part_rot](functions-7.md#get_mario_anim_part_rot)
    - [get_current_save_file_num](functions-7.md#get_current_save_file_num)
    - [save_file_get_using_backup_slot](functions-7.md#save_file_get_using_backup_slot)
    - [save_file_set_using_backup_slot](functions-7.md#save_file_set_using_backup_slot)

@@ -11410,6 +11410,15 @@ function get_mario_anim_part_pos(m, animPart, pos)
     -- ...
 end
 
+--- @param m MarioState
+--- @param animPart integer
+--- @param rot Vec3s
+--- @return boolean
+--- Retrieves the animated part rotation associated to `animPart` from the MarioState `m` and stores it into `rot`. Returns `true` on success or `false` on failure
+function get_mario_anim_part_rot(m, animPart, rot)
+    -- ...
+end
+
 --- @return integer
 --- Gets the current save file number (1-indexed)
 function get_current_save_file_num()
