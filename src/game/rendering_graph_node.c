@@ -74,11 +74,19 @@ Mtx sPrevCamTranf, sCurrCamTranf = {
 };
 
 static Gfx obj_sanitize_gfx[] = {
-    gsSPClearGeometryMode(G_TEXTURE_GEN | G_PACKED_NORMALS_EXT),
-    gsSPSetGeometryMode(G_LIGHTING),
+    gsSPClearGeometryMode(G_CULL_BOTH | G_FOG | G_TEXTURE_GEN
+                        | G_TEXTURE_GEN_LINEAR | G_LOD | G_PACKED_NORMALS_EXT
+                        | G_LIGHT_MAP_EXT | G_LIGHTING_ENGINE_EXT | G_CULL_INVERT_EXT
+                        | G_FRESNEL_COLOR_EXT | G_FRESNEL_ALPHA_EXT),
+    gsSPSetGeometryMode(G_SHADE | G_SHADING_SMOOTH | G_CULL_BACK | G_LIGHTING),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPTexture(0xFFFF, 0xFFFF, 0, 0, G_OFF),
+    gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
+    gsDPSetEnvColor(0xFF, 0xFF, 0xFF, 0xFF),
+    gsDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF),
+    gsDPSetFogColor(0x00, 0x00, 0x00, 0x00),
     gsDPSetAlphaCompare(G_AC_NONE),
+    gsDPSetCycleType(G_CYC_1CYCLE),
+    gsSPNumLights(NUMLIGHTS_1),
     gsSPEndDisplayList(),
 };
 
