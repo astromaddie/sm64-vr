@@ -643,9 +643,9 @@ static void geo_process_perspective(struct GraphNodePerspective *node) {
  */
 static void geo_process_level_of_detail(struct GraphNodeLevelOfDetail *node) {
     Mtx *mtx = gMatStackFixed[gMatStackIndex];
-    s16 distanceFromCam = gBehaviorValues.ProcessLODs ? (s32) -mtx->m[3][2] : 0; // z-component of the translation column
+    f32 distanceFromCam = gBehaviorValues.ProcessLODs ? (s32) -mtx->m[3][2] : 0; // z-component of the translation column
 
-    if (node->minDistance <= distanceFromCam && distanceFromCam < node->maxDistance) {
+    if ((f32)node->minDistance <= distanceFromCam && distanceFromCam < (f32)node->maxDistance) {
         if (node->node.children != 0) {
             geo_process_node_and_siblings(node->node.children);
         }
