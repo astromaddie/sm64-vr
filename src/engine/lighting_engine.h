@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-#define LE_MAX_LIGHTS 256
+#define LE_MAX_LIGHTS 512
 
 enum LEMode {
     LE_MODE_AFFECT_ALL_SHADED_AND_COLORED,
