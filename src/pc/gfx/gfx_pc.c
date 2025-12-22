@@ -25,6 +25,7 @@
 
 #include "game/object_helpers.h"
 #include "game/rendering_graph_node.h"
+#include "menu/intro_geo.h"
 
 #include "pc/configfile.h"
 #include "pc/debug_context.h"
@@ -788,8 +789,17 @@ static void OPTIMIZE_O3 gfx_sp_vertex(size_t n_vertices, size_t dest_index, cons
                 for (int32_t i = 0; i < rsp.current_num_lights - 1; i++) {
                     calculate_normal_dir(&rsp.current_lights[i], rsp.current_lights_coeffs[i], applyLightingDir);
                 }
-                static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
-                static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
+                Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
+                Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
+                // HACK: correct goddard env map shine texture orientation
+                // the proper fix would be making it so it automatically flips
+                // if the texture is an intensity alpha
+                if (gSkipInterpolationTitleScreen) {
+                    lookat_x.dir[0] = 127;
+                    lookat_x.dir[1] = 0;
+                    lookat_y.dir[0] = 0;
+                    lookat_y.dir[1] = 127;
+                }
                 calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0], applyLightingDir);
                 calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1], applyLightingDir);
                 rsp.lights_changed = false;
