@@ -11170,7 +11170,7 @@ COOP_OBJ_FLAG_NON_SYNC = (1 << 2)
 COOP_OBJ_FLAG_INITIALIZED = (1 << 3)
 
 --- @type string
-SM64COOPDX_VERSION = "v1.4"
+SM64COOPDX_VERSION = "v1.4.1"
 
 --- @type string
 VERSION_TEXT = "v"
@@ -11179,7 +11179,7 @@ VERSION_TEXT = "v"
 VERSION_NUMBER = 41
 
 --- @type integer
-MINOR_VERSION_NUMBER = 0
+MINOR_VERSION_NUMBER = 1
 
 --- @type string
 GAME_NAME = "sm64coopdx"
