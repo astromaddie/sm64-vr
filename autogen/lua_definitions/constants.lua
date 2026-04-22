@@ -5636,6 +5636,12 @@ YOSHI_ACT_FINISH_JUMPING_AND_DESPAWN = 4
 YOSHI_ACT_GIVE_PRESENT = 5
 
 --- @type integer
+YOSHI_ACT_GONE = 6
+
+--- @type integer
+YOSHI_ACT_REAPPEAR = 7
+
+--- @type integer
 YOSHI_ACT_CREDITS = 10
 
 --- @type integer
