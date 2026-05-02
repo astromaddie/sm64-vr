@@ -8,6 +8,8 @@
 #define VERSION_NUMBER 42
 #define MINOR_VERSION_NUMBER 0
 
+#define VERSION_OFFSET 37 // difference from old versioning system
+
 #if defined(VERSION_JP)
 #define VERSION_REGION "JP"
 #elif defined(VERSION_EU)
