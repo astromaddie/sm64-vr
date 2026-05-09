@@ -56,19 +56,6 @@ u16 mods_get_enabled_count(void) {
     return enabled;
 }
 
-u16 mods_get_character_select_count(void) {
-    u16 enabled = 0;
-
-    for (u16 i = 0; i < gLocalMods.entryCount; i++) {
-        struct Mod* mod = gLocalMods.entries[i];
-        if (mod->enabled && mod->category && strcmp(mod->category, "cs") == 0) {
-            enabled++;
-        }
-    }
-
-    return enabled;
-}
-
 bool mods_get_all_pausable(void) {
     bool pausable = true;
 
