@@ -10790,6 +10790,51 @@ function surface_is_painting_warp(surf)
     -- ...
 end
 
+--- @param flag ShaderFlag
+--- @return boolean
+--- Gets if a custom shader flag (`SHADER_FLAG_*`) is enabled or not
+function get_shader_flag_enabled(flag)
+    -- ...
+end
+
+--- @param flag ShaderFlag
+--- @param enabled boolean
+--- Enables a custom shader flag (`SHADER_FLAG_*`) for the renderer
+function set_shader_flag_enabled(flag, enabled)
+    -- ...
+end
+
+--- @param flag ShaderFlag
+--- @return number
+--- Gets a value for one of the custom shader flags (`SHADER_FLAG_*`)
+function get_shader_flag_value(flag)
+    -- ...
+end
+
+--- @param flag ShaderFlag
+--- @param value number
+--- Sets a value for one of the custom shader flags (`SHADER_FLAG_*`) for the renderer
+function set_shader_flag_value(flag, value)
+    -- ...
+end
+
+--- @return boolean
+--- Gets if custom shader flags are enabled globally
+function get_global_shader_flags_enabled()
+    -- ...
+end
+
+--- @param enabled boolean
+--- Enables custom shader flags as a global toggle, useful for disabling without manually going through every effect
+function set_global_shader_flags_enabled(enabled)
+    -- ...
+end
+
+--- Clears all custom shader flags (`SHADER_FLAG_*`) for the renderer
+function clear_all_shader_flags()
+    -- ...
+end
+
 --- @param fov number
 --- Sets the override FOV
 function set_override_fov(fov)
@@ -11032,7 +11077,7 @@ end
 --- @param name string
 --- @return Pointer_Vtx
 --- @return integer count
---- Gets a vertex buffer of the current mod from its name. Returns a pointer to the vertex buffering and its vertex count
+--- Gets a vertex buffer of the current mod from its name. Returns a pointer to the vertex buffer and its vertex count
 function vtx_get_from_name(name)
     -- ...
 end

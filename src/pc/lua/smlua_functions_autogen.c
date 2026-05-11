@@ -32124,6 +32124,125 @@ int smlua_func_network_player_palette_to_color(lua_State* L) {
  // smlua_gfx_utils.h //
 ///////////////////////
 
+int smlua_func_get_shader_flag_enabled(lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 1) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "get_shader_flag_enabled", 1, top);
+        return 0;
+    }
+
+    int flag = smlua_to_integer(L, 1);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "get_shader_flag_enabled"); return 0; }
+
+    lua_pushboolean(L, get_shader_flag_enabled(flag));
+
+    return 1;
+}
+
+int smlua_func_set_shader_flag_enabled(lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 2) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "set_shader_flag_enabled", 2, top);
+        return 0;
+    }
+
+    int flag = smlua_to_integer(L, 1);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "set_shader_flag_enabled"); return 0; }
+    bool enabled = smlua_to_boolean(L, 2);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 2, "set_shader_flag_enabled"); return 0; }
+
+    set_shader_flag_enabled(flag, enabled);
+
+    return 1;
+}
+
+int smlua_func_get_shader_flag_value(lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 1) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "get_shader_flag_value", 1, top);
+        return 0;
+    }
+
+    int flag = smlua_to_integer(L, 1);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "get_shader_flag_value"); return 0; }
+
+    lua_pushnumber(L, get_shader_flag_value(flag));
+
+    return 1;
+}
+
+int smlua_func_set_shader_flag_value(lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 2) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "set_shader_flag_value", 2, top);
+        return 0;
+    }
+
+    int flag = smlua_to_integer(L, 1);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "set_shader_flag_value"); return 0; }
+    f32 value = smlua_to_number(L, 2);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 2, "set_shader_flag_value"); return 0; }
+
+    set_shader_flag_value(flag, value);
+
+    return 1;
+}
+
+int smlua_func_get_global_shader_flags_enabled(UNUSED lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 0) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "get_global_shader_flags_enabled", 0, top);
+        return 0;
+    }
+
+
+    lua_pushboolean(L, get_global_shader_flags_enabled());
+
+    return 1;
+}
+
+int smlua_func_set_global_shader_flags_enabled(lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 1) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "set_global_shader_flags_enabled", 1, top);
+        return 0;
+    }
+
+    bool enabled = smlua_to_boolean(L, 1);
+    if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "set_global_shader_flags_enabled"); return 0; }
+
+    set_global_shader_flags_enabled(enabled);
+
+    return 1;
+}
+
+int smlua_func_clear_all_shader_flags(UNUSED lua_State* L) {
+    if (L == NULL) { return 0; }
+
+    int top = lua_gettop(L);
+    if (top != 0) {
+        LOG_LUA_LINE("Improper param count for '%s': Expected %u, Received %u", "clear_all_shader_flags", 0, top);
+        return 0;
+    }
+
+
+    clear_all_shader_flags();
+
+    return 1;
+}
+
 int smlua_func_set_override_fov(lua_State* L) {
     if (L == NULL) { return 0; }
 
@@ -38802,6 +38921,13 @@ void smlua_bind_functions_autogen(void) {
     smlua_bind_function(L, "network_player_palette_to_color", smlua_func_network_player_palette_to_color);
 
     // smlua_gfx_utils.h
+    smlua_bind_function(L, "get_shader_flag_enabled", smlua_func_get_shader_flag_enabled);
+    smlua_bind_function(L, "set_shader_flag_enabled", smlua_func_set_shader_flag_enabled);
+    smlua_bind_function(L, "get_shader_flag_value", smlua_func_get_shader_flag_value);
+    smlua_bind_function(L, "set_shader_flag_value", smlua_func_set_shader_flag_value);
+    smlua_bind_function(L, "get_global_shader_flags_enabled", smlua_func_get_global_shader_flags_enabled);
+    smlua_bind_function(L, "set_global_shader_flags_enabled", smlua_func_set_global_shader_flags_enabled);
+    smlua_bind_function(L, "clear_all_shader_flags", smlua_func_clear_all_shader_flags);
     smlua_bind_function(L, "set_override_fov", smlua_func_set_override_fov);
     smlua_bind_function(L, "set_override_near", smlua_func_set_override_near);
     smlua_bind_function(L, "set_override_far", smlua_func_set_override_far);
