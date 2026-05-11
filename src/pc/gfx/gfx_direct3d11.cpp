@@ -23,7 +23,9 @@
 #include "gfx_direct3d_common.h"
 
 extern "C" {
+    #include "types.h"
     #include "pc/controller/controller_bind_mapping.h"
+    extern Color gVertexColor;
 }
 
 #define DECLARE_GFX_DXGI_FUNCTIONS
@@ -54,6 +56,11 @@ struct PerDrawCB {
     } textures[2];
 };
 
+struct LightmapCB {
+    float color[3];
+    float padding;
+};
+
 struct TextureData {
     ComPtr<ID3D11ShaderResourceView> resource_view;
     ComPtr<ID3D11SamplerState> sampler_state;
@@ -72,6 +79,7 @@ struct ShaderProgramD3D11 {
     uint8_t num_inputs;
     uint8_t num_floats;
     bool used_textures[2];
+    bool used_lightmap;
 };
 
 static struct {
@@ -93,6 +101,7 @@ static struct {
     ComPtr<ID3D11Buffer> vertex_buffer;
     ComPtr<ID3D11Buffer> per_frame_cb;
     ComPtr<ID3D11Buffer> per_draw_cb;
+    ComPtr<ID3D11Buffer> lightmap_cb;
 
 #if DEBUG_D3D
     ComPtr<ID3D11Debug> debug;
@@ -102,6 +111,7 @@ static struct {
 
     PerFrameCB per_frame_cb_data;
     PerDrawCB per_draw_cb_data;
+    LightmapCB lightmap_cb_data;
 
     struct ShaderProgramD3D11 shader_program_pool[CC_MAX_SHADERS];
     uint8_t shader_program_pool_size;
@@ -309,6 +319,19 @@ static void gfx_d3d11_init(void) {
 
     d3d.context->PSSetConstantBuffers(1, 1, d3d.per_draw_cb.GetAddressOf());
 
+    // Create lightmap constant buffer
+
+    constant_buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+    constant_buffer_desc.ByteWidth = (sizeof(LightmapCB) + 15) / 16 * 16;
+    constant_buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    constant_buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    constant_buffer_desc.MiscFlags = 0;
+
+    ThrowIfFailed(d3d.device->CreateBuffer(&constant_buffer_desc, nullptr, d3d.lightmap_cb.GetAddressOf()),
+                  gfx_dxgi_get_h_wnd(), "Failed to create lightmap constant buffer.");
+
+    d3d.context->PSSetConstantBuffers(2, 1, d3d.lightmap_cb.GetAddressOf());
+
     controller_bind_init();
 }
 
@@ -414,6 +437,7 @@ static struct ShaderProgram *gfx_d3d11_create_and_load_new_shader(struct ColorCo
     prg->num_floats = num_floats;
     prg->used_textures[0] = cc_features.used_textures[0];
     prg->used_textures[1] = cc_features.used_textures[1];
+    prg->used_lightmap = cc->cm.light_map;
 
     return (struct ShaderProgram *)(d3d.shader_program = prg);
 }
@@ -638,6 +662,20 @@ static void gfx_d3d11_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t
         d3d.context->Map(d3d.per_draw_cb.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
         memcpy(ms.pData, &d3d.per_draw_cb_data, sizeof(PerDrawCB));
         d3d.context->Unmap(d3d.per_draw_cb.Get(), 0);
+    }
+
+    // Set lightmap constant buffer
+
+    if (d3d.shader_program->used_lightmap) {
+        d3d.lightmap_cb_data.color[0] = gVertexColor[0] / 255.0f;
+        d3d.lightmap_cb_data.color[1] = gVertexColor[1] / 255.0f;
+        d3d.lightmap_cb_data.color[2] = gVertexColor[2] / 255.0f;
+
+        D3D11_MAPPED_SUBRESOURCE ms;
+        ZeroMemory(&ms, sizeof(D3D11_MAPPED_SUBRESOURCE));
+        d3d.context->Map(d3d.lightmap_cb.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
+        memcpy(ms.pData, &d3d.lightmap_cb_data, sizeof(LightmapCB));
+        d3d.context->Unmap(d3d.lightmap_cb.Get(), 0);
     }
 
     // Set vertex buffer data

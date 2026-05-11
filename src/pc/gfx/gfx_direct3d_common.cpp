@@ -194,6 +194,12 @@ void gfx_direct3d_common_build_shader(char buf[4096], size_t& len, size_t& num_f
         append_line(buf, &len, "}");
     }
 
+    if (cc.cm.light_map) {
+        append_line(buf, &len, "cbuffer LightmapCB : register(b2) {");
+        append_line(buf, &len, "    float3 lightmap_color;");
+        append_line(buf, &len, "}");
+    }
+
     // 3 point texture filtering
     // Original author: ArthurCarvalho
     // Based on GLSL implementation by twinaphex, mupen64plus-libretro project.
@@ -291,6 +297,7 @@ void gfx_direct3d_common_build_shader(char buf[4096], size_t& len, size_t& num_f
                 append_line(buf, &len, "    float4 texVal1 = g_texture1.Sample(g_sampler1, input.lightmap);");
             }
             append_line(buf, &len, "    texVal1.rgb = texVal1.rgb * texVal1.rgb + texVal1.rgb;");
+            append_line(buf, &len, "    texVal0.rgb *= lightmap_color;");
         } else {
             if (three_point_filtering) {
                 append_line(buf, &len, "    float4 texVal1;");
