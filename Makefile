@@ -930,15 +930,15 @@ endif
 UPDATER_EXEC :=
 ifeq ($(UPDATER),1)
   ifeq ($(WINDOWS_BUILD),1)
-    UPDATER_EXEC += ./updater/win64/coopdx-updater.exe
+    UPDATER_EXEC += ./updater/win64/coopdx_updater.exe
   else ifeq ($(OSX_BUILD),1)
     ifeq ($(shell uname -m),arm64)
-      UPDATER_EXEC += ./updater/mac_arm/coopdx-updater
+      UPDATER_EXEC += ./updater/mac_arm/coopdx_updater
     else
-      UPDATER_EXEC += ./updater/mac_intel/coopdx-updater
+      UPDATER_EXEC += ./updater/mac_intel/coopdx_updater
     endif
   else ifeq ($(TARGET_RPI),0)
-    UPDATER_EXEC += ./updater/linux/coopdx-updater
+    UPDATER_EXEC += ./updater/linux/coopdx_updater
   endif
 endif
 
@@ -1533,7 +1533,7 @@ all:
 		cp build/us_pc/discord_game_sdk.dylib $(APP_MACOS_DIR); \
     cp build/us_pc/libdiscord_game_sdk.dylib $(APP_MACOS_DIR); \
     cp build/us_pc/libcoopnet.dylib $(APP_MACOS_DIR); \
-    cp build/us_pc/coopdx-updater $(APP_MACOS_DIR); \
+    cp build/us_pc/coopdx_updater $(APP_MACOS_DIR); \
     cp build/us_pc/libjuice.1.6.2.dylib $(APP_MACOS_DIR); \
     cp $(SDL2_LIB) $(APP_MACOS_DIR)/libSDL2.dylib; \
     install_name_tool -change $(BREW_PREFIX)/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2.dylib $(APP_MACOS_DIR)/sm64coopdx > /dev/null 2>&1; \

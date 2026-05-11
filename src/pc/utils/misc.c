@@ -604,9 +604,9 @@ void str_seperator_concat(char *output_buffer, int buffer_size, char** strings, 
 
 static char *get_update_path(void) {
 #ifdef _WIN32
-    char updateExecFilename[] = "coopdx-updater.exe";
+    char updateExecFilename[] = "coopdx_updater.exe";
 #else
-    char updateExecFilename[] = "coopdx-updater";
+    char updateExecFilename[] = "coopdx_updater";
 #endif
     static char sUpdateExecFilePath[SYS_MAX_PATH];
     // this may truncate as sys_exe_path_dir is allocated to be of size SYS_MAX_SIZE, nonetheless such a limit should not be hit during normal use.
@@ -641,7 +641,7 @@ void update_game(void) {
     fclose(stdin);
     fclose(stdout);
     fclose(stderr);
-    execl(updateExecFilePath, "coopdx-updater", "--game-update", NULL);
+    execl(updateExecFilePath, "coopdx_updater", "--game-update", NULL);
     exit(1);
 #endif
 }
