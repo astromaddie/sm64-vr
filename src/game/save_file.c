@@ -16,6 +16,7 @@
 #include "pc/lua/utils/smlua_level_utils.h"
 #include "pc/utils/misc.h"
 #include "pc/configfile.h"
+#include "audio/external.h"
 
 #ifndef bcopy
 #define bcopy(b1,b2,len) (memmove((b2), (b1), (len)), (void) 0)
