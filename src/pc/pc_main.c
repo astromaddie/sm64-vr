@@ -222,7 +222,7 @@ static void select_graphics_backend(void) {
     }
 
 #if defined(_WIN32)
-    if (configGraphicsBackend == GAPI_GL && !gfx_opengl_check_compatibility()) {
+    if (configGraphicsBackend == GAPI_GL && !gfx_sdl_check_opengl_compatibility()) {
         configGraphicsBackend = GAPI_D3D11;
     }
 #endif
