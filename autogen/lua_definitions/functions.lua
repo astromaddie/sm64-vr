@@ -12361,7 +12361,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @return integer
---- Gets the unsigned 32-bit integer value from the field corresponding to `fieldIndex`
+--- Gets the unsigned 32-bit integer value of the object field corresponding to `fieldIndex`
 function obj_get_field_u32(o, fieldIndex)
     -- ...
 end
@@ -12369,7 +12369,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @return integer
---- Gets the signed 32-bit integer value from the field corresponding to `fieldIndex`
+--- Gets the signed 32-bit integer value of the object field corresponding to `fieldIndex`
 function obj_get_field_s32(o, fieldIndex)
     -- ...
 end
@@ -12377,7 +12377,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @return number
---- Sets the float value from the field corresponding to `fieldIndex`
+--- Gets the float value of the object field corresponding to `fieldIndex`
 function obj_get_field_f32(o, fieldIndex)
     -- ...
 end
@@ -12386,7 +12386,7 @@ end
 --- @param fieldIndex integer
 --- @param fieldSubIndex integer
 --- @return integer
---- Gets the signed 32-bit integer value from the sub field corresponding to `fieldSubIndex` from the field corresponding to `fieldIndex`
+--- Gets the signed 16-bit integer value of the object field and sub field corresponding to `fieldSubIndex` and `fieldIndex`
 function obj_get_field_s16(o, fieldIndex, fieldSubIndex)
     -- ...
 end
@@ -12394,7 +12394,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @param value integer
---- Sets the unsigned 32-bit integer value from the field corresponding to `fieldIndex`
+--- Sets the unsigned 32-bit integer value of the object field corresponding to `fieldIndex`
 function obj_set_field_u32(o, fieldIndex, value)
     -- ...
 end
@@ -12402,7 +12402,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @param value integer
---- Sets the signed 32-bit integer value from the field corresponding to `fieldIndex`
+--- Sets the signed 32-bit integer value of the object field corresponding to `fieldIndex`
 function obj_set_field_s32(o, fieldIndex, value)
     -- ...
 end
@@ -12410,7 +12410,7 @@ end
 --- @param o Object
 --- @param fieldIndex integer
 --- @param value number
---- Sets the float value from the field corresponding to `fieldIndex`
+--- Sets the float value of the object field corresponding to `fieldIndex`
 function obj_set_field_f32(o, fieldIndex, value)
     -- ...
 end
@@ -12419,7 +12419,7 @@ end
 --- @param fieldIndex integer
 --- @param fieldSubIndex integer
 --- @param value integer
---- Sets the signed 32-bit integer value from the sub field corresponding to `fieldSubIndex` from the field corresponding to `fieldIndex`
+--- Sets the signed 16-bit integer value of the object field and sub field corresponding to `fieldSubIndex` and `fieldIndex`
 function obj_set_field_s16(o, fieldIndex, fieldSubIndex, value)
     -- ...
 end
