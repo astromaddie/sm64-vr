@@ -640,8 +640,7 @@ static struct ShaderProgram *gfx_opengl_create_and_load_new_shader(struct ColorC
     prg->num_floats = num_floats;
     prg->num_attribs = cnt;
 
-    gfx_opengl_load_shader(prg);
-
+    glUseProgram(shader_program);
     for (int t = 0; t < 2; t++) {
         if (ccf.used_textures[t]) {
             char name[16];
@@ -678,6 +677,8 @@ static struct ShaderProgram *gfx_opengl_create_and_load_new_shader(struct ColorC
     }
 
     prg->uniform_locations[8] = glGetUniformLocation(shader_program, "uFilter");
+
+    gfx_opengl_load_shader(prg);
 
     return prg;
 }
