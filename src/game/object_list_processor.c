@@ -266,7 +266,7 @@ void bhv_mario_update(void) {
         gMarioState->particleFlags = 0;
     }
 
-    gMarioState->visibleToObjects = TRUE;
+    gMarioState->visibleToObjects = true;
 
     smlua_call_event_hooks(HOOK_BEFORE_MARIO_UPDATE, gMarioState);
 

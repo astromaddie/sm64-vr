@@ -1467,7 +1467,7 @@ static struct LuaObjectField sMarioStateFields[LUA_MARIO_STATE_FIELD_COUNT] = {
     { "unkC4",                     LVT_F32,       offsetof(struct MarioState, unkC4),                     false, LOT_NONE              },
     { "usedObj",                   LVT_COBJECT_P, offsetof(struct MarioState, usedObj),                   false, LOT_OBJECT            },
     { "vel",                       LVT_COBJECT,   offsetof(struct MarioState, vel),                       true,  LOT_VEC3F             },
-    { "visibleToObjects",          LVT_U8,        offsetof(struct MarioState, visibleToObjects),          false, LOT_NONE              },
+    { "visibleToObjects",          LVT_BOOL,      offsetof(struct MarioState, visibleToObjects),          false, LOT_NONE              },
     { "wall",                      LVT_COBJECT_P, offsetof(struct MarioState, wall),                      false, LOT_SURFACE           },
     { "wallKickTimer",             LVT_U8,        offsetof(struct MarioState, wallKickTimer),             false, LOT_NONE              },
     { "wallNormal",                LVT_COBJECT,   offsetof(struct MarioState, wallNormal),                true,  LOT_VEC3F             },

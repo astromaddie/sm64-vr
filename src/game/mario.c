@@ -2225,7 +2225,7 @@ void init_single_mario(struct MarioState* m) {
     m->framesSinceB = 0xFF;
 
     m->invincTimer = 0;
-    m->visibleToObjects = TRUE;
+    m->visibleToObjects = true;
 
     if (m->cap & (SAVE_FLAG_CAP_ON_GROUND | SAVE_FLAG_CAP_ON_KLEPTO | SAVE_FLAG_CAP_ON_UKIKI | SAVE_FLAG_CAP_ON_MR_BLIZZARD)) {
         m->flags = 0;
