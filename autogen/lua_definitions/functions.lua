@@ -8350,8 +8350,7 @@ function object_step_without_floor_orient()
 end
 
 --- @param obj Object
---- Don't use this function outside of of a context where the current object and `obj` are the same.<br>
---- Moves `obj` based on a seemingly random mix of using either the current obj or `obj`'s fields
+--- Updates the object `obj` horizontal velocity using its forward vel and move angle yaw, then moves it
 function obj_move_xyz_using_fvel_and_yaw(obj)
     -- ...
 end
@@ -9666,17 +9665,17 @@ function cur_obj_set_billboard_if_vanilla_cam()
     -- ...
 end
 
---- @param o Object
+--- @param obj Object
 --- @param radius number
 --- @param height number
-function obj_set_hitbox_radius_and_height(o, radius, height)
+function obj_set_hitbox_radius_and_height(obj, radius, height)
     -- ...
 end
 
---- @param o Object
+--- @param obj Object
 --- @param radius number
 --- @param height number
-function obj_set_hurtbox_radius_and_height(o, radius, height)
+function obj_set_hurtbox_radius_and_height(obj, radius, height)
     -- ...
 end
 

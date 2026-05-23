@@ -27867,15 +27867,15 @@ int smlua_func_obj_set_hitbox_radius_and_height(lua_State* L) {
         return 0;
     }
 
-    struct Object* o = (struct Object*)smlua_to_cobject(L, 1, LOT_OBJECT);
+    struct Object* obj = (struct Object*)smlua_to_cobject(L, 1, LOT_OBJECT);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "obj_set_hitbox_radius_and_height"); return 0; }
     f32 radius = smlua_to_number(L, 2);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 2, "obj_set_hitbox_radius_and_height"); return 0; }
     f32 height = smlua_to_number(L, 3);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 3, "obj_set_hitbox_radius_and_height"); return 0; }
 
-    extern void obj_set_hitbox_radius_and_height(struct Object *o, f32 radius, f32 height);
-    obj_set_hitbox_radius_and_height(o, radius, height);
+    extern void obj_set_hitbox_radius_and_height(struct Object *obj, f32 radius, f32 height);
+    obj_set_hitbox_radius_and_height(obj, radius, height);
 
     return 1;
 }
@@ -27889,15 +27889,15 @@ int smlua_func_obj_set_hurtbox_radius_and_height(lua_State* L) {
         return 0;
     }
 
-    struct Object* o = (struct Object*)smlua_to_cobject(L, 1, LOT_OBJECT);
+    struct Object* obj = (struct Object*)smlua_to_cobject(L, 1, LOT_OBJECT);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 1, "obj_set_hurtbox_radius_and_height"); return 0; }
     f32 radius = smlua_to_number(L, 2);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 2, "obj_set_hurtbox_radius_and_height"); return 0; }
     f32 height = smlua_to_number(L, 3);
     if (!gSmLuaConvertSuccess) { LOG_LUA("Failed to convert parameter %u for function '%s'", 3, "obj_set_hurtbox_radius_and_height"); return 0; }
 
-    extern void obj_set_hurtbox_radius_and_height(struct Object *o, f32 radius, f32 height);
-    obj_set_hurtbox_radius_and_height(o, radius, height);
+    extern void obj_set_hurtbox_radius_and_height(struct Object *obj, f32 radius, f32 height);
+    obj_set_hurtbox_radius_and_height(obj, radius, height);
 
     return 1;
 }
