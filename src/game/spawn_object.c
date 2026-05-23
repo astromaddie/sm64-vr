@@ -310,6 +310,7 @@ struct Object *allocate_object(struct ObjectNode *objList) {
     obj->oIntangibleTimer = -1;
     obj->oDamageOrCoinValue = 0;
     obj->oHealth = 2048;
+    obj->oLightID = -1;
 
     obj->oCollisionDistance = 1000.0f;
     if (gCurrLevelNum == LEVEL_TTC) {
