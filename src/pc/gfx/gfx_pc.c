@@ -837,9 +837,20 @@ static void OPTIMIZE_O3 gfx_sp_vertex(size_t n_vertices, size_t dest_index, cons
                 rsp.current_lights[rsp.current_num_lights - 2].col[0] == 0 &&
                 rsp.current_lights[rsp.current_num_lights - 2].col[1] == 0 &&
                 rsp.current_lights[rsp.current_num_lights - 2].col[2] == 0;
-            float r = !gFullbright ? rsp.current_lights[rsp.current_num_lights - 1].col[0] * globalLightCached[1][0] : rsp.current_lights[rsp.current_num_lights - (useShade ? 1 : 2)].col[0];
-            float g = !gFullbright ? rsp.current_lights[rsp.current_num_lights - 1].col[1] * globalLightCached[1][1] : rsp.current_lights[rsp.current_num_lights - (useShade ? 1 : 2)].col[1];
-            float b = !gFullbright ? rsp.current_lights[rsp.current_num_lights - 1].col[2] * globalLightCached[1][2] : rsp.current_lights[rsp.current_num_lights - (useShade ? 1 : 2)].col[2];
+            float r = 0;
+            float g = 0;
+            float b = 0;
+            if (gFullbright) {
+                int32_t shadeIndex = rsp.current_num_lights > 1 ? rsp.current_num_lights - (useShade ? 1 : 2) : 0;
+                r = rsp.current_lights[shadeIndex].col[0];
+                g = rsp.current_lights[shadeIndex].col[1];
+                b = rsp.current_lights[shadeIndex].col[2];
+            } else {
+                int32_t lightIndex = rsp.current_num_lights > 0 ? rsp.current_num_lights - 1 : 0;
+                r = rsp.current_lights[lightIndex].col[0] * globalLightCached[1][0];
+                g = rsp.current_lights[lightIndex].col[1] * globalLightCached[1][1];
+                b = rsp.current_lights[lightIndex].col[2] * globalLightCached[1][2];
+            }
 
             signed char nx = vn->n[0];
             signed char ny = vn->n[1];
