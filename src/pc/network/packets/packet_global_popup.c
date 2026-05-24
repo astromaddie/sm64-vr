@@ -35,7 +35,7 @@ void network_receive_global_popup(struct Packet* p) {
 
     struct NetworkPlayer* np = &gNetworkPlayers[p->localIndex];
     if (gNetworkSystem && gNetworkSystem->get_id_str && np->connected && strlen(np->name) > 0) {
-        LOG_CONSOLE("[%s] %s: %s", gNetworkSystem->get_id_str(np->localIndex), np->name, message);
+        LOG_CONSOLE("[%s] %s\\#\\: %s", gNetworkSystem->get_id_str(np->localIndex), np->name, message);
         LOG_INFO("[%s] %s: %s", gNetworkSystem->get_id_str(np->localIndex), np->name, message);
     } else {
         LOG_INFO("rx popup: %s", message);
