@@ -41,6 +41,10 @@ static void djui_panel_dynos_destroy(UNUSED struct DjuiBase* caller) {
     gDjuiInPlayerMenu = false;
 }
 
+static void djui_panel_dynos_open_folder(UNUSED struct DjuiBase* caller) {
+    open_folder(fs_get_write_path("/dynos"));
+}
+
 static void djui_panel_dynos_add_packs(struct DjuiBase* base) {
     int packCount = dynos_pack_get_count();
     for (int i = 0; i < packCount; i++) {
@@ -94,6 +98,7 @@ void djui_panel_dynos_create(struct DjuiBase* caller) {
             {
                 djui_button_left_create(&rect1->base, DLANG(MENU, BACK), DJUI_BUTTON_STYLE_BACK, djui_panel_menu_back);
                 djui_button_right_create(&rect1->base, DLANG(LOBBIES, REFRESH), DJUI_BUTTON_STYLE_NORMAL, djui_panel_dynos_refresh);
+                djui_button_create(body, DLANG(DYNOS, OPEN_DYNOS_FOLDER), DJUI_BUTTON_STYLE_NORMAL, djui_panel_dynos_open_folder);
             }
         } else {
             djui_button_create(body, DLANG(MENU, BACK), DJUI_BUTTON_STYLE_BACK, djui_panel_menu_back);
