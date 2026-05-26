@@ -163,7 +163,7 @@ void player_palette_export(char* name) {
 
     FILE* file = fopen(ppath, "w");
     if (!file) {
-        LOG_ERROR("Unable to create file '%s.ini'!", name);    
+        LOG_ERROR("Unable to create file '%s.ini'!", name);
         return;
     }
 

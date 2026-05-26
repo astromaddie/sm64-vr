@@ -14,13 +14,13 @@ void network_send_global_popup(const char* message, int lines) {
     packet_write(&p, &lines, sizeof(int));
     packet_write(&p, &messageLength, sizeof(u16));
     packet_write(&p, (char*)message, messageLength * sizeof(u8));
-    
+
     // send the packet
     network_send(&p);
 }
 
 void network_receive_global_popup(struct Packet* p) {
-    
+
     u16 messageLength = 0;
     char message[256] = { 0 };
     int lines;
