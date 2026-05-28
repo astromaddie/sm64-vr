@@ -1,4 +1,4 @@
-char gSmluaConstants[] = ""
+const char gSmluaConstants[] = ""
 "math.randomseed(get_time())\n"
 "_SyncTable = {\n"
 "__index = function (t,k)\n"
