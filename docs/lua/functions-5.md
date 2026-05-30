@@ -4314,6 +4314,9 @@ Approaches a `target` value with the current object's facing roll using `delta`
 
 ## [obj_smooth_turn](#obj_smooth_turn)
 
+### Description
+Smoothly turns `angle` and adjust `angleVel` using parameters. Returns TRUE if `angle` reaches `targetAngle`
+
 ### Lua Example
 `local integerValue, angleVel, angle = obj_smooth_turn(angleVel, angle, targetAngle, targetSpeedProportion, accel, minSpeed, maxSpeed)`
 
