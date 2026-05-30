@@ -2844,7 +2844,7 @@ Creates a `message` in the game's chat box
 ## [djui_console_toggle](#djui_console_toggle)
 
 ### Description
-Toggles the visibility of the DJUI console
+Returns whether the DJUI console is currently open or not
 
 ### Lua Example
 `djui_console_toggle()`
@@ -2857,6 +2857,27 @@ Toggles the visibility of the DJUI console
 
 ### C Prototype
 `void djui_console_toggle(void);`
+
+[:arrow_up_small:](#)
+
+<br />
+
+## [djui_console_is_open](#djui_console_is_open)
+
+### Description
+Toggles the visibility of the DJUI console
+
+### Lua Example
+`local booleanValue = djui_console_is_open()`
+
+### Parameters
+- None
+
+### Returns
+- `boolean`
+
+### C Prototype
+`bool djui_console_is_open(void);`
 
 [:arrow_up_small:](#)
 
