@@ -747,9 +747,18 @@ const BehaviorScript *smlua_get_behavior_command(const BehaviorScript *behavior)
     enum BehaviorId id = get_id_from_behavior(behavior);
     struct LuaHookedBehavior *hooked = smlua_find_hooked_behavior(id);
 
-    // Lua and custom behaviors only
-    if (hooked && hooked->type > LUA_BEHAVIOR_TYPE_CALLBACKS) {
-        return hooked->script;
+    if (hooked) {
+
+        // Lua and custom behaviors only
+        if (hooked->type > LUA_BEHAVIOR_TYPE_CALLBACKS) {
+            return hooked->script;
+        }
+
+        // Try to find the vanilla behavior script
+        const BehaviorScript *vanillaScript = get_vanilla_behavior_from_id(hooked->behaviorId);
+        if (vanillaScript) {
+            return vanillaScript;
+        }
     }
     return behavior;
 }
