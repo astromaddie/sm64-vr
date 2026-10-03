@@ -30,6 +30,10 @@
 #include "pc/djui/djui_panel_pause.h"
 #include "pc/nametags.h"
 #include "engine/lighting_engine.h"
+#ifdef SM64_VR
+#include "pc/gfx/gfx_vr.h"
+#include "pc/vr/vr_game.h"
+#endif
 
 struct SpawnInfo gPlayerSpawnInfos[MAX_PLAYERS];
 struct Area gAreaData[MAX_AREAS];
@@ -448,8 +452,21 @@ void play_transition_after_delay(s16 transType, s16 time, u8 red, u8 green, u8 b
 
 void render_game(void) {
     dynos_update_gfx();
+#ifdef SM64_VR
+    gVrTick.rendered_area = false;
+    gVrTick.gameplay_camera = false;
+    gVrTick.in_main_menu = gDjuiInMainMenu;
+    gVrTick.transition = gWarpTransition.isActive;
+#endif
     if (gCurrentArea != NULL && !gWarpTransition.pauseRendering) {
+#ifdef SM64_VR
+        gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_WORLD);
+#endif
         geo_process_root(gCurrentArea->root, gViewportOverride, gViewportClip, gFBSetColor);
+#ifdef SM64_VR
+        gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_HUD);
+        gVrTick.rendered_area = true;
+#endif
 
         gSPViewport(gDisplayListHead++, VIRTUAL_TO_PHYSICAL(&gViewportFullscreen));
 

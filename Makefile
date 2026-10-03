@@ -72,6 +72,8 @@ USE_APP ?= 1
 MIN_MACOS_VERSION ?= 11
 # Make some small adjustments for handheld devices
 HANDHELD ?= 0
+# Build the Steam Frame VR port (OpenXR; Linux, SDL2 + desktop GL). See docs/VR_ARCHITECTURE.md
+VR ?= 0
 
 # Various workarounds for weird toolchains
 NO_BZERO_BCOPY ?= 0
@@ -129,6 +131,18 @@ ifeq ($(HOST_OS),Linux)
     #Rasberry Pi zero, 2, 3, etc
     TARGET_RPI = 1
   endif
+endif
+
+# The VR build is a single-player Linux build on desktop GL through GLX, which the
+# OpenXR GL binding needs: never the Raspberry Pi GLES path, and none of the
+# Discord, CoopNet or updater binaries (none exist for Linux ARM64)
+ifeq ($(VR),1)
+  TARGET_RPI := 0
+  DISCORD_SDK := 0
+  COOPNET := 0
+  UPDATER := 0
+  VR_LINUX_ARM64 := $(if $(findstring aarch64,$(machine)),1,0)
+  OPENXR_PREFIX ?= /opt/openxr
 endif
 
 # MXE overrides
@@ -456,6 +470,11 @@ ifeq ($(TARGET_RK3588),1)
   EXE := $(BUILD_DIR)/sm64coopdx.arm
 endif
 
+ifeq ($(VR),1)
+  BUILD_DIR := $(BUILD_DIR_BASE)/$(VERSION)_pc_vr
+  EXE := $(BUILD_DIR)/sm64coopdx
+endif
+
 ELF            := $(BUILD_DIR)/$(TARGET).elf
 LIBULTRA       := $(BUILD_DIR)/libultra.a
 LD_SCRIPT      := sm64.ld
@@ -474,6 +493,11 @@ SRC_DIRS += src/pc src/pc/gfx src/pc/audio src/pc/controller src/pc/fs src/pc/fs
 
 ifeq ($(DISCORD_SDK),1)
   SRC_DIRS += src/pc/discord
+endif
+
+ifeq ($(VR),1)
+  SRC_DIRS += src/pc/vr third_party/sfvr/src
+  DEFINES += SM64_VR=1
 endif
 
 SRC_DIRS += src/pc/mumble
@@ -705,6 +729,9 @@ endif
 
 
 INCLUDE_DIRS := include $(BUILD_DIR) $(BUILD_DIR)/include src .
+ifeq ($(VR),1)
+  INCLUDE_DIRS += third_party/sfvr/include $(OPENXR_PREFIX)/include
+endif
 ifeq ($(TARGET_N64),1)
   INCLUDE_DIRS += include/libc
 else
@@ -858,7 +885,7 @@ LDFLAGS += -lz
 # Update checker library
 ifeq ($(WINDOWS_BUILD),1)
   LDFLAGS += -lwininet
-else
+else ifneq ($(VR),1)
   LDFLAGS += -lcurl
 endif
 
@@ -883,6 +910,8 @@ else ifeq ($(TARGET_RPI),1)
   endif
 else ifeq ($(TARGET_RK3588),1)
   LDFLAGS += -Llib/lua/linux -l:liblua53-arm64.a
+else ifeq ($(VR_LINUX_ARM64),1)
+  LDFLAGS += -Llib/lua/linux -l:liblua53-arm64.a -ldl
 else
   LDFLAGS += -Llib/lua/linux -l:liblua53.a -ldl
 endif
@@ -1063,6 +1092,18 @@ endif
 ifeq ($(NO_LDIV),1)
   CC_CHECK_CFLAGS += -DNO_LDIV
   CFLAGS += -DNO_LDIV
+endif
+
+# Steam Frame VR build: signed char and no FMA contraction, so ARM64 computes
+# what x86 does (lesson 15); the OpenXR loader linked statically from the
+# pinned SDK; the VR sources with warnings on (lesson 30); the binary finds its
+# bundled libraries in lib/ next to it
+ifeq ($(VR),1)
+  CFLAGS += -fsigned-char -ffp-contract=off
+  EXTRA_CPP_FLAGS += -fsigned-char -ffp-contract=off
+  $(BUILD_DIR)/src/pc/vr/%.o: CFLAGS += -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-parameter
+  $(BUILD_DIR)/third_party/sfvr/src/%.o: CFLAGS += -Wall -Wextra
+  LDFLAGS += -L$(OPENXR_PREFIX)/lib -l:libopenxr_loader.a -ldl -lpthread -Wl,-rpath,'$$ORIGIN/lib'
 endif
 
 #==============================================================================#

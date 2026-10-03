@@ -12,9 +12,16 @@
 
 // moved these from sdl controller implementations
 
+#ifdef SM64_VR
+extern struct ControllerAPI controller_vr;
+#endif
+
 static struct ControllerAPI *controller_implementations[] = {
     &controller_sdl,
     &controller_keyboard,
+#ifdef SM64_VR
+    &controller_vr,
+#endif
 };
 
 s32 osContInit(UNUSED OSMesgQueue *mq, u8 *controllerBits, UNUSED OSContStatus *status) {

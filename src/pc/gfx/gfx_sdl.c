@@ -193,7 +193,31 @@ static void gfx_sdl_main_loop(void (*run_one_game_iter)(void)) {
     run_one_game_iter();
 }
 
+#ifdef SM64_VR
+// In VR the game lays its 2D out for the HUD and panel textures, not the window
+static int sVrUiWidth = 0;
+static int sVrUiHeight = 0;
+
+void *gfx_sdl_vr_window(void) {
+    return wnd;
+}
+
+void gfx_sdl_vr_attach(int width, int height) {
+    sVrUiWidth = width;
+    sVrUiHeight = height;
+    // xrWaitFrame paces the loop; the window is never presented
+    SDL_GL_SetSwapInterval(0);
+}
+#endif
+
 static void gfx_sdl_get_dimensions(uint32_t *width, uint32_t *height) {
+#ifdef SM64_VR
+    if (sVrUiWidth > 0 && sVrUiHeight > 0) {
+        if (width) *width = sVrUiWidth;
+        if (height) *height = sVrUiHeight;
+        return;
+    }
+#endif
     int w, h;
     SDL_GetWindowSize(wnd, &w, &h);
     if (width) *width = w;

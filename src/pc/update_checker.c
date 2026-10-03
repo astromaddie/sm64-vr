@@ -2,7 +2,7 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <wininet.h>
-#else
+#elif !defined(SM64_VR)
 #include <curl/curl.h>
 #endif
 
@@ -104,6 +104,12 @@ void parse_version(const char *data) {
 void get_version_remote(void) {
     sRemoteVersionStr[0] = '\0';
 
+#ifdef SM64_VR
+    // The VR build does not check for updates: no network call at startup and no
+    // libcurl to ship in the Steam Frame package
+    return;
+#endif
+
 #if defined(_WIN32)
     char buffer[0xFF] = { 0 };
 
@@ -143,7 +149,7 @@ void get_version_remote(void) {
     // close handles
     InternetCloseHandle(hUrl);
     InternetCloseHandle(hInternet);
-#else
+#elif !defined(SM64_VR)
     Buffer data = { .str = NULL, .size = 0 };
 
     // initialize libcurl
@@ -172,9 +178,11 @@ void get_version_remote(void) {
     // Clean up
     curl_easy_cleanup(curl);
 #endif
+#ifndef SM64_VR
     parse_version(buffer);
 #if !(defined(_WIN32) || defined(_WIN64))
     free(buffer);
+#endif
 #endif
 }
 

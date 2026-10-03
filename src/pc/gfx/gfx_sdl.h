@@ -7,4 +7,9 @@ extern struct GfxWindowManagerAPI gfx_sdl;
 
 bool gfx_sdl_check_opengl_compatibility(void);
 
+#ifdef SM64_VR
+void *gfx_sdl_vr_window(void);
+void gfx_sdl_vr_attach(int width, int height);
+#endif
+
 #endif

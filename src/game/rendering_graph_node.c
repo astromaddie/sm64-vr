@@ -22,6 +22,10 @@
 #include "skybox.h"
 #include "mario.h"
 #include "hardcoded.h"
+#ifdef SM64_VR
+#include "camera.h"
+#include "pc/vr/vr_game.h"
+#endif
 
 /**
  * This file contains the code that processes the scene graph for rendering.
@@ -368,6 +372,21 @@ void patch_mtx_interpolated(f32 delta) {
     }
     gCurGraphNodeObject = savedObj;
 
+#ifdef SM64_VR
+    // The VR renderer undoes this camera in its eye passes, so it needs exactly
+    // the view the interpolated modelviews below are multiplied by
+    gVrInterpCamValid = false;
+    if (sCameraNode != NULL) {
+        Vec3f vrPos, vrFocus;
+        Mat4 vrCam;
+        delta_interpolate_vec3f(vrPos, sCameraNode->prevPos, sCameraNode->pos, delta);
+        delta_interpolate_vec3f(vrFocus, sCameraNode->prevFocus, sCameraNode->focus, delta);
+        mtxf_lookat(vrCam, vrPos, vrFocus, sCameraNode->roll);
+        memcpy(gVrInterpCamView, vrCam, sizeof(gVrInterpCamView));
+        gVrInterpCamValid = true;
+    }
+#endif
+
     // calculate outside of for loop to reduce overhead
     // technically this is improper use of mtxf functions, but coop doesn't target N64
     Mtx camTranfInv, prevCamTranfInv;
@@ -684,6 +703,13 @@ static void geo_process_perspective(struct GraphNodePerspective *node) {
 static void geo_process_level_of_detail(struct GraphNodeLevelOfDetail *node) {
     Mtx *mtx = gMatStackFixed[gMatStackIndex];
     f32 distanceFromCam = gBehaviorValues.ProcessLODs ? (s32) -mtx->m[3][2] : 0; // z-component of the translation column
+#ifdef SM64_VR
+    // Depth along the game camera's axis is meaningless when the head looks
+    // sideways or back: use the distance
+    if (gVrActive && gBehaviorValues.ProcessLODs) {
+        distanceFromCam = (s32) sqrtf(mtx->m[3][0] * mtx->m[3][0] + mtx->m[3][1] * mtx->m[3][1] + mtx->m[3][2] * mtx->m[3][2]);
+    }
+#endif
 
     if ((f32)node->minDistance <= distanceFromCam && distanceFromCam < (f32)node->maxDistance) {
         if (node->node.children != 0) {
@@ -757,6 +783,11 @@ static void geo_process_camera(struct GraphNodeCamera *node) {
     }
     node->prevTimestamp = gGlobalTimer;
     sCameraNode = node;
+#ifdef SM64_VR
+    if (node->fnNode.func == geo_camera_main) {
+        gVrTick.gameplay_camera = true;
+    }
+#endif
 
     // Increment the matrix stack, If we fail to do so. Just return.
     if (!increment_mat_stack()) { return; }
@@ -1459,6 +1490,15 @@ static s32 obj_is_in_view(struct GraphNodeObject *node, Mat4 matrix) {
     if (geo != NULL && geo->type == GRAPH_NODE_TYPE_CULLING_RADIUS) {
         cullingRadius = (f32)((struct GraphNodeCullingRadius *) geo)->cullingRadius; //! Why is there a f32 cast?
     }
+
+#ifdef SM64_VR
+    // The head can look anywhere around the game camera: cull by distance only
+    // (docs/VR_ARCHITECTURE.md section 5, "obj_is_in_view")
+    if (gVrActive) {
+        f32 dist = sqrtf(matrix[3][0] * matrix[3][0] + matrix[3][1] * matrix[3][1] + matrix[3][2] * matrix[3][2]);
+        return configDrawDistance == 6 || dist < 20000.0f + cullingRadius;
+    }
+#endif
 
     // Don't render if the object is close to or behind the camera
     if (matrix[3][2] > -100.0f + cullingRadius) {

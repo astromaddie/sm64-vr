@@ -70,6 +70,12 @@
 
 #include <SDL2/SDL.h>
 
+#ifdef SM64_VR
+#include "pc/gfx/gfx_sdl.h"
+#include "pc/vr/vr.h"
+#include "pc/vr/vr_log.h"
+#endif
+
 extern Vp gViewportFullscreen;
 
 OSMesg D_80339BEC;
@@ -396,6 +402,61 @@ void produce_one_frame(void) {
     CTX_EXTENT(CTX_RENDER, produce_interpolation_frames_and_delay);
 }
 
+#ifdef SM64_VR
+static void vr_frame_render_current(void) {
+    vr_frame_render((Gfx *) gGfxSPTask->task.t.data_ptr);
+}
+
+// One XR frame (docs/VR_ARCHITECTURE.md section 3). xrWaitFrame paces the loop;
+// the display-time scheduler decides how many 30 Hz ticks run before the frame
+// (normally 0 or 1), the interpolation is patched once for this frame's display
+// time, and the retained display list is replayed per eye.
+static void produce_one_frame_vr(void) {
+    if (!vr_frame_begin()) {
+        // No frame (the session is not running yet): keep the window alive
+        gWindowApi->handle_events();
+        if (vr_exit_requested()) { game_exit(); }
+        gWindowApi->delay(5);
+        return;
+    }
+
+    int ticks = vr_frame_ticks();
+    for (int i = 0; i < ticks; i++) {
+        f64 tickStart = clock_elapsed_f64();
+        CTX_EXTENT(CTX_NETWORK, network_update);
+        CTX_EXTENT(CTX_INTERP, patch_interpolations_before);
+        CTX_EXTENT(CTX_GAME_LOOP, game_loop_one_iteration);
+        CTX_EXTENT(CTX_SMLUA, smlua_update);
+        if (gAudioThread.state == INVALID) {
+            CTX_EXTENT(CTX_AUDIO, buffer_audio);
+        }
+        vr_frame_tick_ran();
+        vr_frame_add_tick_ms((clock_elapsed_f64() - tickStart) * 1000.0);
+    }
+
+    // Per-frame state advances here, once per XR frame, never per eye: the
+    // eye and HUD passes only replay the display list this patches
+    f32 delta = vr_frame_interp_t();
+    gfx_start_frame();
+    gRenderingInterpolated = true;
+    gRenderingDelta = delta;
+    gFramePercentage = delta;
+    if (!gSkipInterpolationTitleScreen) { patch_interpolations(delta); }
+    if (gGameInited) {
+        CTX_EXTENT(CTX_RENDER, vr_frame_render_current);
+    }
+    gRenderingInterpolated = false;
+    vr_frame_end();
+
+    sDrawnFrames++;
+    f64 curTime = clock_elapsed_f64();
+    if (curTime >= sFpsTimeLast + 1.0) {
+        compute_fps(curTime);
+    }
+    if (vr_exit_requested()) { game_exit(); }
+}
+#endif
+
 // used for rendering 2D scenes fullscreen like the loading or crash screens
 void produce_one_dummy_frame(void (*callback)(), u8 clearColorR, u8 clearColorG, u8 clearColorB) {
     // measure frame start time
@@ -449,6 +510,9 @@ void audio_shutdown(void) {
 }
 
 void game_deinit(void) {
+#ifdef SM64_VR
+    vr_shutdown();
+#endif
     if (gGameInited) { configfile_save(configfile_name()); }
     controller_shutdown();
     audio_shutdown();
@@ -522,6 +586,9 @@ int main(int argc, char *argv[]) {
     } else {
         fs_init(sys_user_path());
     }
+#elif defined(SM64_VR)
+    // The VR build keeps the ROM, saves and config in $XDG_DATA_HOME/SM64VR
+    fs_init(gCLIOpts.savePath[0] ? gCLIOpts.savePath : vr_data_dir());
 #else
     fs_init(gCLIOpts.savePath[0] ? gCLIOpts.savePath : sys_user_path());
 #endif
@@ -610,11 +677,26 @@ int main(int argc, char *argv[]) {
         network_init(NT_NONE, false);
     }
 
+#ifdef SM64_VR
+    // The XR session starts once the game is loaded; until then the runtime
+    // shows its own loading state
+    if (!gCLIOpts.headless && vr_init(gfx_sdl_vr_window())) {
+        int uiWidth, uiHeight;
+        vr_ui_size(&uiWidth, &uiHeight);
+        gfx_sdl_vr_attach(uiWidth, uiHeight);
+        vr_probe();
+    }
+#endif
+
     // main loop
     while (true) {
         debug_context_reset();
         CTX_BEGIN(CTX_TOTAL);
+#ifdef SM64_VR
+        gWindowApi->main_loop(vr_enabled() ? produce_one_frame_vr : produce_one_frame);
+#else
         gWindowApi->main_loop(produce_one_frame);
+#endif
 #ifdef DISCORD_SDK
         discord_update();
 #endif

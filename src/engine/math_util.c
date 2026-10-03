@@ -4,6 +4,9 @@
 #include "engine/graph_node.h"
 #include "math_util.h"
 #include "surface_collision.h"
+#ifdef SM64_VR
+#include "pc/vr/vr_game.h"
+#endif
 
 #include "trig_tables.inc.c"
 
@@ -566,6 +569,15 @@ OPTIMIZE_O3 void mtxf_billboard(VEC_OUT Mat4 dest, Mat4 mtx, Vec3f position, s16
     dest[2][2] = 1;
     dest[2][3] = 0;
 
+#ifdef SM64_VR
+    // Face the head, not the game camera (docs/VR_ARCHITECTURE.md section 5)
+    if (gVrBillboardHead) {
+        for (s32 i = 0; i < 3; i++) {
+            for (s32 j = 0; j < 3; j++) { dest[i][j] = gVrBillboardRot[i][j]; }
+        }
+    }
+#endif
+
     dest[3][0] = mtx[0][0] * position[0] + mtx[1][0] * position[1] + mtx[2][0] * position[2] + mtx[3][0];
     dest[3][1] = mtx[0][1] * position[0] + mtx[1][1] * position[1] + mtx[2][1] * position[2] + mtx[3][1];
     dest[3][2] = mtx[0][2] * position[0] + mtx[1][2] * position[1] + mtx[2][2] * position[2] + mtx[3][2];
@@ -588,6 +600,15 @@ OPTIMIZE_O3 void mtxf_cylboard(VEC_OUT Mat4 dest, Mat4 mtx, Vec3f position, s16 
     dest[2][1] = 0;
     dest[2][2] = 1;
     dest[2][3] = 0;
+
+#ifdef SM64_VR
+    // Turn about the world's up to face the head's heading
+    if (gVrBillboardHead) {
+        for (s32 i = 0; i < 3; i++) {
+            for (s32 j = 0; j < 3; j++) { dest[i][j] = gVrCylboardRot[i][j]; }
+        }
+    }
+#endif
 
     dest[3][0] = mtx[0][0] * position[0] + mtx[1][0] * position[1] + mtx[2][0] * position[2] + mtx[3][0];
     dest[3][1] = mtx[0][1] * position[0] + mtx[1][1] * position[1] + mtx[2][1] * position[2] + mtx[3][1];

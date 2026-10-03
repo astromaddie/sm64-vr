@@ -110,6 +110,40 @@ static struct RenderingState {
 
 struct GfxDimensions gfx_current_dimensions = { 0 };
 
+#ifdef SM64_VR
+#include "gfx_vr.h"
+
+// The current VR pass (GFX_VR_PASS_FLAT outside gfx_vr_run_pass) and the
+// display-list segment the replay is in
+static struct GfxVrPass sVrPass = { .kind = GFX_VR_PASS_FLAT };
+static enum GfxVrSegment sVrSeg = GFX_VR_SEG_SETUP;
+static bool sVrWorldProj = false; // the eye's world projection is loaded
+static struct GfxVrPassStats sVrStats;
+
+static inline bool gfx_vr_draw_allowed(void) {
+    bool keep;
+    switch (sVrPass.kind) {
+        case GFX_VR_PASS_EYE:
+            keep = sVrSeg == GFX_VR_SEG_WORLD || sVrSeg == GFX_VR_SEG_SKY_VR;
+            break;
+        case GFX_VR_PASS_HUD:
+            keep = sVrSeg == GFX_VR_SEG_HUD;
+            break;
+        case GFX_VR_PASS_PANEL:
+            keep = sVrSeg != GFX_VR_SEG_SKY_VR;
+            break;
+        default:
+            return true;
+    }
+    if (keep) {
+        sVrStats.tris_drawn++;
+    } else {
+        sVrStats.tris_dropped++;
+    }
+    return keep;
+}
+#endif
+
 static bool dropped_frame = false;
 
 static float buf_vbo[MAX_BUFFERED * (26 * 3)] = { 0.0f }; // 3 vertices in a triangle and 26 floats per vtx
@@ -659,6 +693,49 @@ static void calculate_normal_dir(const Light_t *light, Vec3f coeffs, bool applyL
     vec3f_normalize(coeffs);
 }
 
+#ifdef SM64_VR
+// An eye pass replaces the world's perspective projection with the eye's
+// (which also undoes the camera view baked into every modelview) and drops the
+// screen roll the camera node multiplies onto it. True when handled here.
+static bool gfx_vr_projection(uint8_t parameters, Mat4 matrix) {
+    if (sVrPass.kind != GFX_VR_PASS_EYE) {
+        return false;
+    }
+    if (parameters & G_MTX_LOAD) {
+        bool perspective = fabsf(matrix[2][3] + 1.0f) < 1e-3f && fabsf(matrix[3][3]) < 1e-3f;
+        if (sVrSeg == GFX_VR_SEG_WORLD && perspective && sVrPass.world_proj != NULL) {
+            sVrPass.world_proj(&matrix[0][0], &rsp.P_matrix[0][0], sVrPass.user);
+            sVrWorldProj = true;
+            sVrStats.world_proj_loads++;
+            return true;
+        }
+        sVrWorldProj = false;
+        return false;
+    }
+    // A multiply onto the eye's projection: the camera's screen roll
+    return sVrWorldProj;
+}
+
+static void gfx_vr_marker(uint32_t segment) {
+    if (segment >= GFX_VR_SEG_COUNT) {
+        return;
+    }
+    sVrSeg = (enum GfxVrSegment) segment;
+    sVrStats.markers++;
+    if (sVrSeg == GFX_VR_SEG_WORLD) {
+        sVrStats.saw_world = true;
+    }
+    if (sVrPass.kind == GFX_VR_PASS_EYE && sVrSeg == GFX_VR_SEG_SKY_VR) {
+        // The sky's vertices are directions in world axes: the eye's rotation only
+        memcpy(rsp.P_matrix, sVrPass.sky_proj, sizeof(rsp.P_matrix));
+        sVrWorldProj = false;
+        mtxf_identity(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+        mtxf_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+        rsp.lights_changed = 1;
+    }
+}
+#endif
+
 static void OPTIMIZE_O3 gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
     Mat4 matrix;
@@ -688,6 +765,11 @@ static void OPTIMIZE_O3 gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
 
     if (parameters & G_MTX_PROJECTION) {
+#ifdef SM64_VR
+        if (gfx_vr_projection(parameters, matrix)) {
+            // replaced or dropped for the eye
+        } else
+#endif
         if (parameters & G_MTX_LOAD) {
             mtxf_copy(rsp.P_matrix, matrix);
         } else {
@@ -1065,6 +1147,9 @@ static void OPTIMIZE_O3 gfx_sp_vertex(size_t n_vertices, size_t dest_index, cons
 }
 
 static void OPTIMIZE_O3 gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
+#ifdef SM64_VR
+    if (!gfx_vr_draw_allowed()) { return; }
+#endif
     struct GfxVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
     struct GfxVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
     struct GfxVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
@@ -2135,6 +2220,62 @@ void gfx_end_frame(void) {
     gfx_display_frame();
 }
 
+#ifdef SM64_VR
+void gfx_vr_resync_state(void) {
+    gfx_flush();
+    if (rendering_state.shader_program != NULL) {
+        gfx_rapi->unload_shader(rendering_state.shader_program);
+        rendering_state.shader_program = NULL;
+    }
+    gfx_rapi->set_depth_test(rendering_state.depth_test);
+    gfx_rapi->set_depth_mask(rendering_state.depth_mask);
+    gfx_rapi->set_zmode_decal(rendering_state.decal_mode);
+    gfx_rapi->set_use_alpha(rendering_state.alpha_blend);
+    memset(&rendering_state.viewport, 0xFF, sizeof(rendering_state.viewport));
+    memset(&rendering_state.scissor, 0xFF, sizeof(rendering_state.scissor));
+    rdp.viewport_or_scissor_changed = true;
+    rdp.textures_changed[0] = true;
+    rdp.textures_changed[1] = true;
+}
+
+static void gfx_vr_set_dimensions(uint32_t width, uint32_t height, bool eye) {
+    gfx_current_dimensions.width = width;
+    gfx_current_dimensions.height = height > 0 ? height : 1;
+    gfx_current_dimensions.x_adjust_4by3 = 0;
+    gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
+    // An eye's projection has its own aspect; the 2D layout keeps the game's
+    gfx_current_dimensions.x_adjust_ratio = eye ? 1.0f : (4.0f / 3.0f) / gfx_current_dimensions.aspect_ratio;
+}
+
+void gfx_vr_restore_dimensions(void) {
+    uint32_t w = 0, h = 0;
+    gfx_wapi->get_dimensions(&w, &h);
+    gfx_vr_set_dimensions(w, h, false);
+}
+
+void gfx_vr_run_pass(Gfx *commands, const struct GfxVrPass *pass) {
+    sVrPass = *pass;
+    sVrSeg = GFX_VR_SEG_SETUP;
+    sVrWorldProj = false;
+    memset(&sVrStats, 0, sizeof(sVrStats));
+
+    gfx_vr_set_dimensions(pass->width, pass->height, pass->kind == GFX_VR_PASS_EYE);
+    gfx_sp_reset();
+    sHasInverseCameraMatrix = false;
+    gfx_vr_resync_state();
+
+    gfx_run_dl(commands);
+    gfx_flush();
+
+    sVrPass.kind = GFX_VR_PASS_FLAT;
+    sVrSeg = GFX_VR_SEG_SETUP;
+}
+
+const struct GfxVrPassStats *gfx_vr_pass_stats(void) {
+    return &sVrStats;
+}
+#endif
+
 void gfx_shutdown(void) {
     if (gfx_rapi) {
         if (gfx_rapi->shutdown) gfx_rapi->shutdown();
@@ -2489,5 +2630,10 @@ void OPTIMIZE_O3 ext_gfx_run_dl(Gfx* cmd) {
         case G_STATE_EXT:
             gfx_sp_load_or_save_state(C0(16, 8), cmd->words.w1);
             break;
+#ifdef SM64_VR
+        case G_VR_MARKER:
+            gfx_vr_marker(cmd->words.w1);
+            break;
+#endif
     }
 }

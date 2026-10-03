@@ -13,6 +13,10 @@
 #include "geo_commands.h"
 #include "hardcoded.h"
 #include "skybox.h"
+#ifdef SM64_VR
+#include <math.h>
+#include "pc/gfx/gfx_vr.h"
+#endif
 
 /**
  * @file skybox.c
@@ -283,10 +287,106 @@ void *create_skybox_ortho_matrix(s8 player) {
 /**
  * Creates the skybox's display list, then draws the 3x3 grid of tiles.
  */
+#ifdef SM64_VR
+/**
+ * The sky for the VR eyes (docs/VR_ARCHITECTURE.md section 5, "skybox"): the
+ * same tile textures on a sphere of directions around the eye, drawn with the
+ * eye's rotation only, so it sits at infinity and stays put when the head turns.
+ *
+ * The flat skybox maps a view direction to the panorama the way it scrolls:
+ * 1280 units of x are 360 degrees of yaw (x falls as yaw rises; yaw 0 looks
+ * along +Z, yaw 90 along +X) and y = 480 + 4 * pitch in degrees. So tile column
+ * c (160 units) spans yaw 405 - 45c down to 360 - 45c, and tile row r (120
+ * units) spans pitch 120 - 30r down to 90 - 30r: rows 1 to 6 cover the sphere.
+ */
+#define VR_SKY_RADIUS 10000.0f
+#define VR_SKY_ROW_FIRST 1
+#define VR_SKY_ROW_LAST 6
+#define VR_SKY_COLS 8
+#define VR_SKY_SUB_YAW 4
+#define VR_SKY_SUB_PITCH 3
+#define VR_SKY_TILES ((VR_SKY_ROW_LAST - VR_SKY_ROW_FIRST + 1) * VR_SKY_COLS)
+#define VR_SKY_TILE_VERTS ((VR_SKY_SUB_YAW + 1) * (VR_SKY_SUB_PITCH + 1))
+#define VR_SKY_TILE_GFX (1 + 5 + 1 + VR_SKY_SUB_YAW * VR_SKY_SUB_PITCH)
+#define VR_SKY_GFX (16 + VR_SKY_TILES * VR_SKY_TILE_GFX)
+
+static Vtx sVrSkyVerts[VR_SKY_TILES * VR_SKY_TILE_VERTS];
+static Gfx sVrSkyGfx[VR_SKY_GFX];
+
+static Gfx *vr_sky_display_list(s8 background, s8 colorIndex) {
+    // The vertices never change; the textures and the colour follow the area
+    static bool vertsBuilt = false;
+    if (!vertsBuilt) {
+        vertsBuilt = true;
+        for (s32 r = VR_SKY_ROW_FIRST; r <= VR_SKY_ROW_LAST; r++) {
+            for (s32 c = 0; c < VR_SKY_COLS; c++) {
+                Vtx *verts = &sVrSkyVerts[((r - VR_SKY_ROW_FIRST) * VR_SKY_COLS + c) * VR_SKY_TILE_VERTS];
+                for (s32 j = 0; j <= VR_SKY_SUB_PITCH; j++) {
+                    f32 fv = (f32) j / VR_SKY_SUB_PITCH;
+                    f32 pitch = (120.0f - 30.0f * r - 30.0f * fv) * (f32) M_PI / 180.0f;
+                    for (s32 i = 0; i <= VR_SKY_SUB_YAW; i++) {
+                        f32 fu = (f32) i / VR_SKY_SUB_YAW;
+                        f32 yaw = (405.0f - 45.0f * c - 45.0f * fu) * (f32) M_PI / 180.0f;
+                        f32 x = sinf(yaw) * cosf(pitch) * VR_SKY_RADIUS;
+                        f32 y = sinf(pitch) * VR_SKY_RADIUS;
+                        f32 z = cosf(yaw) * cosf(pitch) * VR_SKY_RADIUS;
+                        make_vertex(verts, j * (VR_SKY_SUB_YAW + 1) + i, x, y, z,
+                                    (s16) (fu * (31 << 5)), (s16) (fv * (31 << 5)), 255, 255, 255, 255);
+                    }
+                }
+            }
+        }
+    }
+
+    f32 r = gSkyboxColor[0] / 255.0f;
+    f32 g = gSkyboxColor[1] / 255.0f;
+    f32 b = gSkyboxColor[2] / 255.0f;
+    u8 *color = sSkyboxColors[colorIndex];
+
+    Gfx *dl = sVrSkyGfx;
+    gDPPipeSync(dl++);
+    gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BOTH | G_FOG | G_ZBUFFER | G_TEXTURE_GEN);
+    gDPSetCycleType(dl++, G_CYC_1CYCLE);
+    gDPSetRenderMode(dl++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
+    gDPSetTextureFilter(dl++, G_TF_BILERP);
+    gDPSetCombineMode(dl++, G_CC_FADEA, G_CC_FADEA);
+    gSPDisplayList(dl++, dl_skybox_tile_tex_settings);
+    for (s32 row = VR_SKY_ROW_FIRST; row <= VR_SKY_ROW_LAST; row++) {
+        for (s32 c = 0; c < VR_SKY_COLS; c++) {
+            s32 tileIndex = row * SKYBOX_COLS + c;
+            const Texture *texture = NULL;
+            if (background < 0 || background >= 10) {
+                texture = gCustomSkyboxPtrList[tileIndex];
+            } else {
+                texture = (*(SkyboxTexture *) segmented_to_virtual(sSkyboxTextures[background]))[tileIndex];
+            }
+            Vtx *verts = &sVrSkyVerts[((row - VR_SKY_ROW_FIRST) * VR_SKY_COLS + c) * VR_SKY_TILE_VERTS];
+
+            gDPSetEnvColor(dl++, color[0] * r, color[1] * g, color[2] * b, 255);
+            gLoadBlockTexture(dl++, 32, 32, G_IM_FMT_RGBA, texture);
+            gSPVertex(dl++, VIRTUAL_TO_PHYSICAL(verts), VR_SKY_TILE_VERTS, 0);
+            for (s32 j = 0; j < VR_SKY_SUB_PITCH; j++) {
+                for (s32 i = 0; i < VR_SKY_SUB_YAW; i++) {
+                    s32 v0 = j * (VR_SKY_SUB_YAW + 1) + i;
+                    s32 v1 = v0 + VR_SKY_SUB_YAW + 1;
+                    gSP2Triangles(dl++, v0, v1, v1 + 1, 0x0, v0, v1 + 1, v0 + 1, 0x0);
+                }
+            }
+        }
+    }
+    gSPDisplayList(dl++, dl_skybox_end);
+    gSPEndDisplayList(dl++);
+    return sVrSkyGfx;
+}
+#endif
+
 Gfx *init_skybox_display_list(s8 player, s8 background, s8 colorIndex) {
     extern Gfx* gBackgroundSkyboxGfx;
 
     s32 dlCommandCount = 5 + (sSkyboxTileNumY * sSkyboxTileNumX) * 8; // 5 for the start and end, plus the amount of skybox tiles
+#ifdef SM64_VR
+    dlCommandCount += 4; // the VR markers and the sky sphere's display list
+#endif
 
     void *skybox;
     if (gRenderingInterpolated) {
@@ -303,11 +403,19 @@ Gfx *init_skybox_display_list(s8 player, s8 background, s8 colorIndex) {
     } else {
         Mtx *ortho = create_skybox_ortho_matrix(player);
 
+#ifdef SM64_VR
+        gSPVrMarker(dlist++, GFX_VR_SEG_SKY_FLAT);
+#endif
         gSPDisplayList(dlist++, dl_skybox_begin);
         gSPMatrix(dlist++, VIRTUAL_TO_PHYSICAL(ortho), G_MTX_PROJECTION | G_MTX_MUL | G_MTX_NOPUSH);
         gSPDisplayList(dlist++, dl_skybox_tile_tex_settings);
         draw_skybox_tile_grid(&dlist, background, player, colorIndex);
         gSPDisplayList(dlist++, dl_skybox_end);
+#ifdef SM64_VR
+        gSPVrMarker(dlist++, GFX_VR_SEG_SKY_VR);
+        gSPDisplayList(dlist++, vr_sky_display_list(background, colorIndex));
+        gSPVrMarker(dlist++, GFX_VR_SEG_WORLD);
+#endif
         gSPEndDisplayList(dlist);
     }
     return skybox;
