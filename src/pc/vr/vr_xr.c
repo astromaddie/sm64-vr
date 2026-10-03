@@ -534,10 +534,15 @@ bool vr_xr_sim_active(const vr_xr_t *xr) {
 	return xr->session_running && ((xr->frame.should_render && xr->focused) || xr->config.force_render);
 }
 
-void vr_xr_fix_fov(int mode, const float in[4], float out[4]) {
+void vr_xr_fix_fov(int mode, int eye, const float in[4], float out[4]) {
+	// GoldenEye's device log (docs/VR_ARCHITECTURE.md there), l,r,u,d
+	static const float frame_fov[2][4] = {
+		{ -1.028f, 0.885f, 0.864f, -1.048f },
+		{ -0.877f, 1.033f, 0.866f, -1.042f }
+	};
 	bool inverted = in[0] > in[1] && in[3] > in[2];
 	for (int i = 0; i < 4; i++) {
-		out[i] = in[i];
+		out[i] = mode == VR_FOV_FRAME ? frame_fov[eye ? 1 : 0][i] : in[i];
 	}
 	if (!inverted || mode == VR_FOV_RAW) {
 		return;
@@ -563,7 +568,7 @@ static void view_from_xr(vr_xr_t *xr, int eye, vr_view_t *out, const XrView *in)
 	out->pose.position[1] = in->pose.position.y;
 	out->pose.position[2] = in->pose.position.z;
 	float raw[4] = { in->fov.angleLeft, in->fov.angleRight, in->fov.angleUp, in->fov.angleDown };
-	vr_xr_fix_fov(xr->config.fov_mode, raw, out->fov);
+	vr_xr_fix_fov(xr->config.fov_mode, eye, raw, out->fov);
 	if (!xr->fov_logged[eye]) {
 		xr->fov_logged[eye] = true;
 		vr_logf("view %d fov from runtime %.3f,%.3f,%.3f,%.3f (l,r,u,d)%s; fov_mode %d renders %.3f,%.3f,%.3f,%.3f",

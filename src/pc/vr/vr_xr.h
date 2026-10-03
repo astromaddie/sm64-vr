@@ -92,14 +92,15 @@ typedef struct {
 	// angleRight and angleDown > angleUp), as SteamVR on the Frame reported on
 	// 2026-10-03: VR_FOV_RAW uses it as given, VR_FOV_NEGATE flips all four
 	// signs, VR_FOV_SWAP exchanges left/right and up/down. The corrected fov
-	// is both rendered and submitted.
+	// is both rendered and submitted. VR_FOV_FRAME ignores the runtime and uses
+	// the Frame's full fov as F-Zero X and GoldenEye located it (2026-10-01/02).
 	int fov_mode;
 } vr_xr_config_t;
 
-enum { VR_FOV_RAW = 0, VR_FOV_NEGATE = 1, VR_FOV_SWAP = 2 };
+enum { VR_FOV_RAW = 0, VR_FOV_NEGATE = 1, VR_FOV_SWAP = 2, VR_FOV_FRAME = 3 };
 
 // The fov to render and submit for a located one (pure; tests/vr)
-void vr_xr_fix_fov(int mode, const float in[4], float out[4]);
+void vr_xr_fix_fov(int mode, int eye, const float in[4], float out[4]);
 
 typedef struct {
 	XrSwapchain handle;

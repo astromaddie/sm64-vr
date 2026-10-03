@@ -20,8 +20,9 @@ static const sfvr_setting_key port_keys[] = {
 	// Show the whole frame on the mono panel, even in gameplay.
 	{ "force_mono", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
 	// An inverted view fov from the runtime (vr_xr.h): 0 = as given,
-	// 1 = negate all four angles, 2 = swap left/right and up/down.
-	{ "fov_mode", SFVR_SETTING_INT, 1.0, 0.0, 2.0, NULL },
+	// 1 = negate all four angles, 2 = swap left/right and up/down,
+	// 3 = always the Frame's full fov measured by the earlier ports.
+	{ "fov_mode", SFVR_SETTING_INT, 1.0, 0.0, 3.0, NULL },
 	// Diagnostic: render the main menu's background level in stereo (with the
 	// menu on the HUD quad), for unattended eye dumps without input.
 	{ "diag_menu_stereo", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },

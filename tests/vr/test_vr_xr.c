@@ -572,15 +572,15 @@ static void test_pure_helpers(void) {
 static void test_fix_fov(void) {
 	const float reported[4] = { 0.713f, -0.516f, -0.526f, 0.703f };
 	float out[4];
-	vr_xr_fix_fov(VR_FOV_RAW, reported, out);
+	vr_xr_fix_fov(VR_FOV_RAW, 0, reported, out);
 	CHECK_NEAR(out[0], 0.713f, 1e-6f);
 	CHECK_NEAR(out[3], 0.703f, 1e-6f);
-	vr_xr_fix_fov(VR_FOV_NEGATE, reported, out);
+	vr_xr_fix_fov(VR_FOV_NEGATE, 0, reported, out);
 	CHECK_NEAR(out[0], -0.713f, 1e-6f);
 	CHECK_NEAR(out[1], 0.516f, 1e-6f);
 	CHECK_NEAR(out[2], 0.526f, 1e-6f);
 	CHECK_NEAR(out[3], -0.703f, 1e-6f);
-	vr_xr_fix_fov(VR_FOV_SWAP, reported, out);
+	vr_xr_fix_fov(VR_FOV_SWAP, 0, reported, out);
 	CHECK_NEAR(out[0], -0.516f, 1e-6f);
 	CHECK_NEAR(out[1], 0.713f, 1e-6f);
 	CHECK_NEAR(out[2], 0.703f, 1e-6f);
@@ -588,11 +588,15 @@ static void test_fix_fov(void) {
 	// A normal fov is never touched
 	const float normal[4] = { -1.028f, 0.885f, 0.864f, -1.048f };
 	for (int mode = VR_FOV_RAW; mode <= VR_FOV_SWAP; mode++) {
-		vr_xr_fix_fov(mode, normal, out);
+		vr_xr_fix_fov(mode, 0, normal, out);
 		for (int i = 0; i < 4; i++) {
 			CHECK_NEAR(out[i], normal[i], 1e-6f);
 		}
 	}
+	// VR_FOV_FRAME ignores the runtime: the right eye mirrors the left's shape
+	vr_xr_fix_fov(VR_FOV_FRAME, 1, reported, out);
+	CHECK(out[0] < 0.0f && out[1] > 0.0f && out[2] > 0.0f && out[3] < 0.0f);
+	CHECK(out[1] > -out[0]);
 }
 
 static void test_instance_negotiation(void) {
