@@ -436,18 +436,25 @@ static void produce_one_frame_vr(void) {
 
     // Per-frame state advances here, once per XR frame, never per eye: the
     // eye and HUD passes only replay the display list this patches
-    f32 delta = vr_frame_interp_t();
-    gfx_start_frame();
-    gRenderingInterpolated = true;
-    gRenderingDelta = delta;
-    gFramePercentage = delta;
-    if (!gSkipInterpolationTitleScreen) { patch_interpolations(delta); }
-    // Before the first tick there is no display list: a Steam launch reaches
-    // SYNCHRONIZED frames before focus, and the sim stays frozen until focus
-    if (gGameInited && gGfxSPTask != NULL) {
+    // Before the first tick there is nothing to interpolate or replay: the
+    // interpolation tables are made by patch_interpolations_before(), and
+    // gGfxSPTask may still hold the loading screen's list. A Steam launch
+    // reaches SYNCHRONIZED frames before focus, and the sim stays frozen until
+    // focus. The frame ends with no layers.
+    static bool sVrTicked = false;
+    if (ticks > 0) { sVrTicked = true; }
+    if (gGameInited && sVrTicked && gGfxSPTask != NULL) {
+        f32 delta = vr_frame_interp_t();
+        gfx_start_frame();
+        gRenderingInterpolated = true;
+        gRenderingDelta = delta;
+        gFramePercentage = delta;
+        if (!gSkipInterpolationTitleScreen) { patch_interpolations(delta); }
         CTX_EXTENT(CTX_RENDER, vr_frame_render_current);
+        gRenderingInterpolated = false;
+    } else {
+        gWindowApi->handle_events();
     }
-    gRenderingInterpolated = false;
     vr_frame_end();
 
     sDrawnFrames++;
@@ -567,6 +574,12 @@ void* main_game_init(UNUSED void* dummy) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef SM64_VR
+    // The launcher sends stdout to a file: line-buffer it, so the log is
+    // current when the game hangs or sits on its crash screen
+    setvbuf(stdout, NULL, _IOLBF, 0);
+#endif
+
     // handle terminal arguments
     if (!parse_cli_opts(argc, argv)) { return 0; }
 

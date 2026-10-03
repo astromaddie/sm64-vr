@@ -299,6 +299,11 @@ static CRASH_HANDLER_TYPE crash_handler(EXCEPTION_POINTERS *ExceptionInfo) {
 static void crash_handler(const int signalNum, siginfo_t *info, UNUSED ucontext_t *context) {
 #endif
     printf("Game crashed! preparing crash screen...\n");
+#if defined(SM64_VR) && defined(__linux__)
+    fflush(stdout);
+    fprintf(stderr, "crash: signal %d, code %d, address %p\n", signalNum, info->si_code, info->si_addr);
+    fflush(stderr);
+#endif
     memset(sCrashHandlerText, 0, sizeof(sCrashHandlerText));
     CrashHandlerText *pText = &sCrashHandlerText[0];
     gDjuiDisabled = true;
@@ -565,6 +570,15 @@ static void crash_handler(const int signalNum, siginfo_t *info, UNUSED ucontext_
 
             // dladdr gives us function names if -rdynamic/-export-dynamic is set in compiler flags
             Dl_info info;
+#ifdef SM64_VR
+            // The headset hides the crash screen: put the trace in the log too
+            if (dladdr(trace[i], &info) && info.dli_sname) {
+                fprintf(stderr, "crash: #%d %s + 0x%lX (%s)\n", (int) i, info.dli_sname, (unsigned long) ((char *) trace[i] - (char *) info.dli_saddr), messages[i]);
+            } else {
+                fprintf(stderr, "crash: #%d %s\n", (int) i, messages[i]);
+            }
+            fflush(stderr);
+#endif
             if (dladdr(trace[i], &info) && info.dli_sname) {
                 crash_handler_set_text(-1, y, 0x00, 0xFF, 0xFF, "%s", info.dli_sname);
                 crash_handler_set_text(-1, y, 0xFF, 0xFF, 0xFF, " + 0x%lX", trace[i] - info.dli_saddr);
