@@ -534,7 +534,27 @@ bool vr_xr_sim_active(const vr_xr_t *xr) {
 	return xr->session_running && ((xr->frame.should_render && xr->focused) || xr->config.force_render);
 }
 
-static void view_from_xr(vr_view_t *out, const XrView *in) {
+void vr_xr_fix_fov(int mode, const float in[4], float out[4]) {
+	bool inverted = in[0] > in[1] && in[3] > in[2];
+	for (int i = 0; i < 4; i++) {
+		out[i] = in[i];
+	}
+	if (!inverted || mode == VR_FOV_RAW) {
+		return;
+	}
+	if (mode == VR_FOV_NEGATE) {
+		for (int i = 0; i < 4; i++) {
+			out[i] = -in[i];
+		}
+	} else if (mode == VR_FOV_SWAP) {
+		out[0] = in[1];
+		out[1] = in[0];
+		out[2] = in[3];
+		out[3] = in[2];
+	}
+}
+
+static void view_from_xr(vr_xr_t *xr, int eye, vr_view_t *out, const XrView *in) {
 	out->pose.orientation[0] = in->pose.orientation.x;
 	out->pose.orientation[1] = in->pose.orientation.y;
 	out->pose.orientation[2] = in->pose.orientation.z;
@@ -542,10 +562,15 @@ static void view_from_xr(vr_view_t *out, const XrView *in) {
 	out->pose.position[0] = in->pose.position.x;
 	out->pose.position[1] = in->pose.position.y;
 	out->pose.position[2] = in->pose.position.z;
-	out->fov[0] = in->fov.angleLeft;
-	out->fov[1] = in->fov.angleRight;
-	out->fov[2] = in->fov.angleUp;
-	out->fov[3] = in->fov.angleDown;
+	float raw[4] = { in->fov.angleLeft, in->fov.angleRight, in->fov.angleUp, in->fov.angleDown };
+	vr_xr_fix_fov(xr->config.fov_mode, raw, out->fov);
+	if (!xr->fov_logged[eye]) {
+		xr->fov_logged[eye] = true;
+		vr_logf("view %d fov from runtime %.3f,%.3f,%.3f,%.3f (l,r,u,d)%s; fov_mode %d renders %.3f,%.3f,%.3f,%.3f",
+			eye, raw[0], raw[1], raw[2], raw[3],
+			(raw[0] > raw[1] && raw[3] > raw[2]) ? " INVERTED" : "",
+			xr->config.fov_mode, out->fov[0], out->fov[1], out->fov[2], out->fov[3]);
+	}
 }
 
 // A head at the LOCAL origin (LOCAL is head-relative: its origin is where the
@@ -608,8 +633,8 @@ bool vr_xr_frame_begin(vr_xr_t *xr) {
 			(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) &&
 			(vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT)
 		) {
-			view_from_xr(&xr->frame.views[0], &views[0]);
-			view_from_xr(&xr->frame.views[1], &views[1]);
+			view_from_xr(xr, 0, &xr->frame.views[0], &views[0]);
+			view_from_xr(xr, 1, &xr->frame.views[1], &views[1]);
 			xr->frame.views_valid = true;
 		}
 	}

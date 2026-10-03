@@ -582,6 +582,12 @@ int main(int argc, char *argv[]) {
 
     // handle terminal arguments
     if (!parse_cli_opts(argc, argv)) { return 0; }
+#ifdef SM64_VR
+    // The loading screen draws to the flat window from the main thread while
+    // the game loads on another; nobody sees it in the headset, and on the
+    // Frame it once crashed in Zink's glXSwapBuffers at startup
+    gCLIOpts.hideLoadingScreen = true;
+#endif
 
 #ifdef _WIN32
     // handle Windows console

@@ -568,6 +568,33 @@ static void test_pure_helpers(void) {
 	CHECK_INT(vr_xr_choose_color_format(other, 1, &srgb), 0);
 }
 
+// SteamVR on the Frame reported both axes inverted on 2026-10-03
+static void test_fix_fov(void) {
+	const float reported[4] = { 0.713f, -0.516f, -0.526f, 0.703f };
+	float out[4];
+	vr_xr_fix_fov(VR_FOV_RAW, reported, out);
+	CHECK_NEAR(out[0], 0.713f, 1e-6f);
+	CHECK_NEAR(out[3], 0.703f, 1e-6f);
+	vr_xr_fix_fov(VR_FOV_NEGATE, reported, out);
+	CHECK_NEAR(out[0], -0.713f, 1e-6f);
+	CHECK_NEAR(out[1], 0.516f, 1e-6f);
+	CHECK_NEAR(out[2], 0.526f, 1e-6f);
+	CHECK_NEAR(out[3], -0.703f, 1e-6f);
+	vr_xr_fix_fov(VR_FOV_SWAP, reported, out);
+	CHECK_NEAR(out[0], -0.516f, 1e-6f);
+	CHECK_NEAR(out[1], 0.713f, 1e-6f);
+	CHECK_NEAR(out[2], 0.703f, 1e-6f);
+	CHECK_NEAR(out[3], -0.526f, 1e-6f);
+	// A normal fov is never touched
+	const float normal[4] = { -1.028f, 0.885f, 0.864f, -1.048f };
+	for (int mode = VR_FOV_RAW; mode <= VR_FOV_SWAP; mode++) {
+		vr_xr_fix_fov(mode, normal, out);
+		for (int i = 0; i < 4; i++) {
+			CHECK_NEAR(out[i], normal[i], 1e-6f);
+		}
+	}
+}
+
 static void test_instance_negotiation(void) {
 	fake_reset();
 	vr_xr_t xr;
@@ -1164,6 +1191,7 @@ static void test_log_lines(void) {
 int main(void) {
 	vr_log_set_sink(log_sink);
 	RUN(test_pure_helpers);
+	RUN(test_fix_fov);
 	RUN(test_instance_negotiation);
 	RUN(test_session_and_swapchains);
 	RUN(test_lifecycle);

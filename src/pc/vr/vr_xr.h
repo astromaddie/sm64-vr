@@ -88,7 +88,18 @@ typedef struct {
 	float resolution_scale; // of the runtime's recommended eye size
 	int refresh_rate; // Hz to request with XR_FB_display_refresh_rate; 0 = do not
 	bool force_render; // submit layers even when shouldRender is false (diagnostics)
+	// What to do with a view fov whose angles are both inverted (angleLeft >
+	// angleRight and angleDown > angleUp), as SteamVR on the Frame reported on
+	// 2026-10-03: VR_FOV_RAW uses it as given, VR_FOV_NEGATE flips all four
+	// signs, VR_FOV_SWAP exchanges left/right and up/down. The corrected fov
+	// is both rendered and submitted.
+	int fov_mode;
 } vr_xr_config_t;
+
+enum { VR_FOV_RAW = 0, VR_FOV_NEGATE = 1, VR_FOV_SWAP = 2 };
+
+// The fov to render and submit for a located one (pure; tests/vr)
+void vr_xr_fix_fov(int mode, const float in[4], float out[4]);
 
 typedef struct {
 	XrSwapchain handle;
@@ -103,6 +114,7 @@ typedef struct {
 typedef struct vr_xr {
 	vr_xr_api_t api;
 	vr_xr_config_t config;
+	bool fov_logged[2]; // the first located fov of each view went to the log
 
 	XrInstance instance;
 	XrSystemId system_id;

@@ -160,7 +160,8 @@ bool vr_init(void *sdl_window) {
         .app_name = VR_APP_NAME,
         .resolution_scale = setting("resolution_scale"),
         .refresh_rate = (int)setting("refresh_rate"),
-        .force_render = setting("force_render") != 0
+        .force_render = setting("force_render") != 0,
+        .fov_mode = (int)setting("fov_mode")
     };
     if (!vr_xr_instance_create(&vr.xr, &api, &config)) {
         vr_logf("VR unavailable: no OpenXR runtime or headset; running flat");
