@@ -442,7 +442,9 @@ static void produce_one_frame_vr(void) {
     gRenderingDelta = delta;
     gFramePercentage = delta;
     if (!gSkipInterpolationTitleScreen) { patch_interpolations(delta); }
-    if (gGameInited) {
+    // Before the first tick there is no display list: a Steam launch reaches
+    // SYNCHRONIZED frames before focus, and the sim stays frozen until focus
+    if (gGameInited && gGfxSPTask != NULL) {
         CTX_EXTENT(CTX_RENDER, vr_frame_render_current);
     }
     gRenderingInterpolated = false;
