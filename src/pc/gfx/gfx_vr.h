@@ -25,6 +25,7 @@ enum GfxVrSegment {
     GFX_VR_SEG_SKY_FLAT, // the game's screen-space skybox tiles
     GFX_VR_SEG_SKY_VR,   // the sky sphere at infinity (skybox.c, VR only)
     GFX_VR_SEG_HUD,      // everything 2D after the scene: HUD, dialogs, pause, DJUI
+    GFX_VR_SEG_TRANSITION, // the flat warp transition (iris, fade); stereo shows a fade quad instead
     GFX_VR_SEG_COUNT
 };
 

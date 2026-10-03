@@ -75,6 +75,7 @@ static struct {
     vr_pose_t hud_pose;
     float hud_width, hud_height;
     bool dump_this_frame;
+    bool holding; // held behind a closed warp transition (full fade, no eyes)
     uint32_t frames;
     uint32_t worn_stereo_frames; // stereo frames from tracked views
     int last_synthetic; // -1 before the first frame
@@ -551,9 +552,6 @@ static const char *mono_reason(void) {
     if (!gVrTick.gameplay_camera) {
         return "not a gameplay camera (menu, intro)";
     }
-    if (gVrTick.transition) {
-        return "warp transition";
-    }
     if (gVrTick.in_main_menu && !vrr.st.diag_menu_stereo) {
         return "main menu";
     }
@@ -637,10 +635,18 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         reason = "degenerate camera";
     }
     bool stereo = reason == NULL;
-    if (vr_stage_set_mode(&vrr.stage, stereo ? VR_MODE_STEREO : VR_MODE_MONO, vrr.now_ns)) {
+    // Behind a closed warp transition the game draws no area: in stereo that
+    // is a held full fade in the transition's colour, not a switch to the panel
+    bool hold = !stereo && vrr.views_ok && gVrTick.transition_hold && !gVrTick.in_main_menu
+        && vrr.stage.mode == VR_MODE_STEREO;
+    if (hold != vrr.holding) {
+        vrr.holding = hold;
+        vr_logf("render: %s", hold ? "holding behind a closed transition" : "transition hold released");
+    }
+    if (!hold && vr_stage_set_mode(&vrr.stage, stereo ? VR_MODE_STEREO : VR_MODE_MONO, vrr.now_ns)) {
         vr_logf("render: %s%s%s", stereo ? "stereo" : "mono", stereo ? "" : ": ", stereo ? "" : reason);
     }
-    vrr.info.mono_reason = stereo ? "" : reason;
+    vrr.info.mono_reason = stereo || hold ? "" : reason;
 
     if (stereo && !frame->synthetic) {
         vrr.worn_stereo_frames++;
@@ -652,7 +658,9 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         mkdirs(vrr.dump_dir);
     }
 
-    if (stereo) {
+    if (hold) {
+        gVrBillboardHead = false;
+    } else if (stereo) {
         vr_stage_apply_recentre(&vrr.stage, raw_views);
 
         vr_anchor_t anchor;
@@ -707,7 +715,13 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
     gl_restore();
     gfx_vr_restore_dimensions();
 
-    layers->fade_alpha = vr_stage_fade_alpha(&vrr.stage, vrr.now_ns);
+    // The stage's mode-switch fade is black; a warp transition fades in its own colour
+    float stage_alpha = vr_stage_fade_alpha(&vrr.stage, vrr.now_ns);
+    float trans_alpha = (stereo || hold) ? gVrTick.transition_alpha : 0.0f;
+    layers->fade_alpha = stage_alpha > trans_alpha ? stage_alpha : trans_alpha;
+    for (int i = 0; i < 3; i++) {
+        layers->fade_rgb[i] = trans_alpha > stage_alpha ? gVrTick.transition_rgb[i] / 255.0f : 0.0f;
+    }
     vrr.info.mode = vrr.stage.mode;
     vrr.info.frames = vrr.frames;
     vrr.info.fade_alpha = layers->fade_alpha;

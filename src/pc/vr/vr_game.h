@@ -15,6 +15,12 @@ struct VrTickInfo {
     bool gameplay_camera; // ... through a Lakitu camera node (geo_camera_main)
     bool in_main_menu; // the DJUI main menu is up (its background level renders)
     bool transition; // a warp transition (iris, fade) is drawn this tick
+    // The transition as a fade over the view: 0 = clear, 1 = covered by
+    // transition_rgb. transition_hold: the game has stopped rendering behind a
+    // closed transition (gWarpTransition.pauseRendering).
+    float transition_alpha;
+    unsigned char transition_rgb[3];
+    bool transition_hold;
 };
 
 // Written by render_game() for the display list of the newest tick

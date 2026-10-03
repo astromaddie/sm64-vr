@@ -457,6 +457,13 @@ void render_game(void) {
     gVrTick.gameplay_camera = false;
     gVrTick.in_main_menu = gDjuiInMainMenu;
     gVrTick.transition = gWarpTransition.isActive;
+    gVrTick.transition_hold = gCurrentArea != NULL && gWarpTransition.pauseRendering;
+    gVrTick.transition_alpha = gVrTick.transition_hold ? 1.0f : 0.0f;
+    if (gVrTick.transition_hold) {
+        gVrTick.transition_rgb[0] = gWarpTransRed;
+        gVrTick.transition_rgb[1] = gWarpTransGreen;
+        gVrTick.transition_rgb[2] = gWarpTransBlue;
+    }
 #endif
     if (gCurrentArea != NULL && !gWarpTransition.pauseRendering) {
 #ifdef SM64_VR
@@ -507,8 +514,24 @@ void render_game(void) {
 
         if (gWarpTransition.isActive) {
             if (gWarpTransDelay == 0) {
+#ifdef SM64_VR
+                // The fade the transition is at, from the timer it is about to
+                // advance: into (odd types) closes 0 -> 1, from opens 1 -> 0
+                extern u8 sTransitionColorFadeCount[];
+                u8 vrTime = gWarpTransition.time;
+                f32 vrT = vrTime > 1 ? (f32) sTransitionColorFadeCount[0] / (f32) (vrTime - 1) : 1.0f;
+                vrT = MIN(MAX(vrT, 0.0f), 1.0f);
+                gVrTick.transition_alpha = (gWarpTransition.type & 1) ? vrT : 1.0f - vrT;
+                gVrTick.transition_rgb[0] = gWarpTransition.data.red;
+                gVrTick.transition_rgb[1] = gWarpTransition.data.green;
+                gVrTick.transition_rgb[2] = gWarpTransition.data.blue;
+                gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_TRANSITION);
+#endif
                 gWarpTransition.isActive = !render_screen_transition(0, gWarpTransition.type, gWarpTransition.time,
                                                                      &gWarpTransition.data);
+#ifdef SM64_VR
+                gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_HUD);
+#endif
                 if (!gWarpTransition.isActive) {
                     if (gWarpTransition.type & 1) {
                         gWarpTransition.pauseRendering = TRUE;

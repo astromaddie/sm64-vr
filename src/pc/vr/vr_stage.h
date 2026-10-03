@@ -54,7 +54,8 @@ typedef struct {
 	bool panel;
 	vr_pose_t panel_pose;
 	float panel_width;
-	float fade_alpha; // 0: no fade quad; else a black quad at this alpha over everything
+	float fade_alpha; // 0: no fade quad; else a quad at this alpha over everything
+	float fade_rgb[3]; // the fade quad's colour (black, or a warp transition's)
 } vr_layers_t;
 
 #define VR_FADE_HOLD_S 0.25f

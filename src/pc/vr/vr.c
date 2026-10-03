@@ -310,8 +310,8 @@ void vr_frame_render(Gfx *dl) {
     vr.layers_valid = true;
 }
 
-// Clears the fade swapchain's image to black at `alpha`: the quad the compositor blends over everything
-static bool fade_render(float alpha) {
+// Clears the fade swapchain's image to `rgb` at `alpha`: the quad the compositor blends over everything
+static bool fade_render(float alpha, const float rgb[3]) {
     if (vr.fade.handle == XR_NULL_HANDLE && !vr_xr_swapchain_create(&vr.xr, &vr.fade, 4, 4)) {
         return false;
     }
@@ -319,7 +319,9 @@ static bool fade_render(float alpha) {
     if (!vr_xr_swapchain_acquire(&vr.xr, &vr.fade, &index)) {
         return false;
     }
-    vr_gl_clear_image(vr.fade.images[index].image, vr.fade.width, vr.fade.height, 0, 0, 0, alpha);
+    // The quad's alpha is premultiplied (no UNPREMULTIPLIED flag on the fade layer)
+    vr_gl_clear_image(vr.fade.images[index].image, vr.fade.width, vr.fade.height,
+        rgb[0] * alpha, rgb[1] * alpha, rgb[2] * alpha, alpha);
     vr_xr_swapchain_release(&vr.xr, &vr.fade);
     return true;
 }
@@ -330,7 +332,7 @@ void vr_frame_end(void) {
     uint32_t count = 0;
 
     if (vr.layers_valid) {
-        bool fade = vr.layers.fade_alpha > VR_FADE_MIN_ALPHA && fade_render(vr.layers.fade_alpha);
+        bool fade = vr.layers.fade_alpha > VR_FADE_MIN_ALPHA && fade_render(vr.layers.fade_alpha, vr.layers.fade_rgb);
         count = vr_compose_layers(&vr.compose, &vr.xr, &vr.layers, &vr.hud, &vr.panel, fade ? &vr.fade : NULL);
         layers = vr.compose.list;
     } else if (vr.want_projection) {
