@@ -456,6 +456,7 @@ void render_game(void) {
     gVrTick.rendered_area = false;
     gVrTick.gameplay_camera = false;
     gVrTick.in_main_menu = gDjuiInMainMenu;
+    gVrTick.star_select = false;
     gVrTick.transition = gWarpTransition.isActive;
     gVrTick.transition_hold = gCurrentArea != NULL && gWarpTransition.pauseRendering;
     gVrTick.transition_alpha = gVrTick.transition_hold ? 1.0f : 0.0f;

@@ -549,7 +549,7 @@ static const char *mono_reason(void) {
     if (!gVrTick.rendered_area) {
         return "no area rendered";
     }
-    if (!gVrTick.gameplay_camera) {
+    if (!gVrTick.gameplay_camera && !gVrTick.star_select) {
         return "not a gameplay camera (menu, intro)";
     }
     if (gVrTick.in_main_menu && !vrr.st.diag_menu_stereo) {
@@ -666,11 +666,16 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         vr_anchor_t anchor;
         vr_anchor_from_cam(&vrr.cam, vrr.st.rig.level_pitch, &anchor);
         vr_eye_cam_t head_cam;
-        vr_eye_from_pose(&anchor, &vrr.st.rig, &vrr.stage.recentre, &vrr.head, &vrr.head, &head_cam);
+        // The star select is a small fixed scene: its own scale makes it a diorama
+        vr_rig_t rig = vrr.st.rig;
+        if (gVrTick.star_select && vrr.st.star_select_scale > 0.0f) {
+            rig.world_scale = vrr.st.star_select_scale;
+        }
+        vr_eye_from_pose(&anchor, &rig, &vrr.stage.recentre, &vrr.head, &vrr.head, &head_cam);
         for (int e = 0; e < 2; e++) {
             vr_eye_ctx_t *c = &vrr.eye_ctx[e];
             c->cam = vrr.cam;
-            vr_eye_from_pose(&anchor, &vrr.st.rig, &vrr.stage.recentre, &vrr.head, &vrr.views[e].pose, &c->eye);
+            vr_eye_from_pose(&anchor, &rig, &vrr.stage.recentre, &vrr.head, &vrr.views[e].pose, &c->eye);
             memcpy(c->fov, vrr.views[e].fov, sizeof(c->fov));
         }
 

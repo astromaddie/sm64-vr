@@ -7,6 +7,7 @@ void vr_render_settings_from(vr_render_settings_t *out, const vr_settings_t *s) 
 	out->rig.world_scale = (float)vr_settings_get(s, "world_scale");
 	out->rig.head_translation = (float)vr_settings_get(s, "head_translation");
 	out->rig.level_pitch = vr_settings_get(s, "level_pitch") != 0;
+	out->star_select_scale = (float)vr_settings_get(s, "star_select_scale");
 	out->hud_distance = (float)vr_settings_get(s, "hud_distance");
 	out->hud_scale = (float)vr_settings_get(s, "hud_scale");
 	out->hud_mode = (int)vr_settings_get(s, "hud_mode");

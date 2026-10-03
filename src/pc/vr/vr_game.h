@@ -14,6 +14,7 @@ struct VrTickInfo {
     bool rendered_area; // render_game drew an area this tick (world segment present)
     bool gameplay_camera; // ... through a Lakitu camera node (geo_camera_main)
     bool in_main_menu; // the DJUI main menu is up (its background level renders)
+    bool star_select; // the act selector: its fixed-camera star row renders in stereo
     bool transition; // a warp transition (iris, fade) is drawn this tick
     // The transition as a fade over the view: 0 = clear, 1 = covered by
     // transition_rgb. transition_hold: the game has stopped rendering behind a

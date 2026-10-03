@@ -17,6 +17,10 @@ static const sfvr_setting_key port_keys[] = {
 	// The anchor drops the game camera's pitch: looking level in the headset is
 	// level in the game, and the head supplies pitch.
 	{ "level_pitch", SFVR_SETTING_BOOL, 1.0, 0.0, 1.0, NULL },
+	// Game units per metre on the star select screen. Its camera sits about
+	// 1300 units from the star row: at 300 the row reads as a diorama about
+	// 4 m away rather than 1.5 m stars 12 m away at life size.
+	{ "star_select_scale", SFVR_SETTING_FLOAT, 300.0, 10.0, 2000.0, NULL },
 	// Show the whole frame on the mono panel, even in gameplay.
 	{ "force_mono", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
 	// An inverted view fov from the runtime (vr_xr.h): 0 = as given,

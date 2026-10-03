@@ -17,6 +17,7 @@
 // The settings the renderer reads, taken once when it is attached.
 typedef struct {
 	vr_rig_t rig; // world_scale, head_translation, level_pitch
+	float star_select_scale; // game units per metre on the act selector (its own diorama scale)
 	float hud_distance; // metres
 	float hud_scale; // percent
 	int hud_mode; // 0 near, 1 far, 2 leash (only near is built)

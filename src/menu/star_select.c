@@ -20,6 +20,10 @@
 #include "game/rumble_init.h"
 #include "sm64.h"
 #include "star_select.h"
+#ifdef SM64_VR
+#include "pc/gfx/gfx_vr.h"
+#include "pc/vr/vr_game.h"
+#endif
 #include "prevent_bss_reordering.h"
 #include "pc/network/network.h"
 #include "pc/lua/utils/smlua_misc_utils.h"
@@ -422,7 +426,16 @@ Gfx *geo_act_selector_strings(s16 callContext, UNUSED struct GraphNode *node, UN
 Gfx *geo_act_selector_strings(s16 callContext, UNUSED struct GraphNode *node) {
 #endif
     if (callContext == GEO_CONTEXT_RENDER) {
+#ifdef SM64_VR
+        // The stars are a 3D scene for the eyes; the course and act names are
+        // 2D, so they go on the HUD quad (docs/VR_ARCHITECTURE.md section 5)
+        gVrTick.star_select = true;
+        gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_HUD);
+#endif
         print_act_selector_strings();
+#ifdef SM64_VR
+        gSPVrMarker(gDisplayListHead++, GFX_VR_SEG_WORLD);
+#endif
     }
     return NULL;
 }
