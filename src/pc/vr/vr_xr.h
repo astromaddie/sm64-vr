@@ -22,6 +22,7 @@
 
 #define VR_SWAPCHAIN_MAX_IMAGES 8
 #define VR_MAX_REFRESH_RATES 16
+#define VR_MIN_REFRESH_RATE 72 // the lowest rate the automatic fallback steps to
 
 #define VR_GL_SRGB8_ALPHA8 0x8C43
 #define VR_GL_SRGB8 0x8C41
@@ -78,6 +79,7 @@ typedef struct {
 	PFN_xrGetOpenGLGraphicsRequirementsKHR get_opengl_graphics_requirements;
 	PFN_xrEnumerateDisplayRefreshRatesFB enumerate_display_refresh_rates;
 	PFN_xrRequestDisplayRefreshRateFB request_display_refresh_rate;
+	PFN_xrGetDisplayRefreshRateFB get_display_refresh_rate; // optional: only logged
 } vr_xr_api_t;
 
 // The runtime through the OpenXR loader (vr_xr_loader.c).
@@ -86,7 +88,7 @@ void vr_xr_api_loader(vr_xr_api_t *api);
 typedef struct {
 	const char *app_name;
 	float resolution_scale; // of the runtime's recommended eye size
-	int refresh_rate; // Hz to request with XR_FB_display_refresh_rate; 0 = do not
+	int refresh_rate; // Hz to request with XR_FB_display_refresh_rate (the nearest offered one); 0 = do not
 	bool force_render; // submit layers even when shouldRender is false (diagnostics)
 	// What to do with a view fov whose angles are both inverted (angleLeft >
 	// angleRight and angleDown > angleUp), as SteamVR on the Frame reported on
@@ -135,6 +137,9 @@ typedef struct vr_xr {
 	bool ext_frame_controller; // XR_VALVE_frame_controller_interaction is enabled
 	bool ext_refresh_rate; // XR_FB_display_refresh_rate is enabled
 	int refresh_rate_chosen; // Hz, 0 when none was requested
+	int refresh_rate_granted; // Hz the runtime reported switching to (the change event); 0 until it did
+	float refresh_rates[VR_MAX_REFRESH_RATES]; // the rates the runtime offered at the request
+	uint32_t refresh_rate_count;
 
 	// Session lifecycle. `state` is the last XrSessionState the runtime sent.
 	XrSessionState state;
@@ -166,6 +171,22 @@ uint32_t vr_xr_scaled_size(uint32_t recommended, uint32_t max, float scale);
 // Pure: picks the rate to request from the enumerated ones: the nearest to
 // `wanted`, the lower one on a tie. 0 when there are none.
 int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted);
+
+// Pure: the highest offered rate below `current` and not below VR_MIN_REFRESH_RATE (the
+// automatic fallback's next step: 120, then 90, then 72). 0 when there is none.
+int vr_xr_next_lower_refresh_rate(const float *rates, uint32_t count, int current);
+
+// Asks the runtime for the offered rate nearest `wanted` (xrRequestDisplayRefreshRateFB),
+// remembering the offered list. Returns the rate requested, 0 when nothing was requested.
+int vr_xr_request_refresh_rate(vr_xr_t *xr, int wanted);
+
+// The rate the display should now be running at: what the runtime reported switching to,
+// else what was requested. 0 when no rate was requested.
+int vr_xr_target_refresh_rate(const vr_xr_t *xr);
+
+// Steps down to the next lower offered rate. Returns the new rate, 0 when there is none
+// (already at the floor, or the extension is unavailable).
+int vr_xr_fall_back_refresh_rate(vr_xr_t *xr);
 
 // Pure: SRGB8_ALPHA8, else SRGB8, else RGBA8 (then *srgb is false); 0 when none is offered.
 int64_t vr_xr_choose_color_format(const int64_t *formats, uint32_t count, bool *srgb);

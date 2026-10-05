@@ -12,6 +12,7 @@
 #include "vr_math.h"
 #include "vr_paths.h"
 #include "vr_perf.h"
+#include "vr_rate.h"
 #include "vr_render.h"
 #include "vr_sched.h"
 #include "vr_stage.h"
@@ -53,6 +54,7 @@ static struct {
 
     vr_perf_t perf;
     double tick_ms;
+    vr_rate_t rate; // the automatic refresh-rate fallback
 } vr;
 
 static float setting(const char *name) {
@@ -188,10 +190,12 @@ bool vr_init(void *sdl_window) {
         return false;
     }
 
-    vr_logf("session created: swapchain format 0x%llx (%s), eye %ux%u (recommended %ux%u), resolution_scale %.2f",
-        (long long)vr.xr.color_format, vr.xr.color_srgb ? "sRGB" : "linear RGBA8",
-        vr.xr.eye[0].width, vr.xr.eye[0].height, vr.xr.eye_recommended[0][0], vr.xr.eye_recommended[0][1],
-        config.resolution_scale);
+    vr_logf("session created: swapchain format 0x%llx (%s)", (long long)vr.xr.color_format, vr.xr.color_srgb ? "sRGB" : "linear RGBA8");
+    for (int e = 0; e < 2; e++) {
+        vr_logf("eye %d swapchain %ux%u (runtime recommends %ux%u, maximum %ux%u, resolution_scale %.2f); the game renders into it directly",
+            e, vr.xr.eye[e].width, vr.xr.eye[e].height, vr.xr.eye_recommended[e][0], vr.xr.eye_recommended[e][1],
+            vr.xr.eye_max[e][0], vr.xr.eye_max[e][1], config.resolution_scale);
+    }
     if (vr.xr.color_format != VR_GL_SRGB8_ALPHA8 && vr.xr.color_format != VR_GL_RGBA8) {
         vr_logf("WARNING: the swapchain format has no alpha channel, so the HUD quad cannot be translucent");
     }
@@ -204,6 +208,7 @@ bool vr_init(void *sdl_window) {
     vr_provider_t provider = { .user = NULL, .acquire = provider_acquire, .release = provider_release };
     vr_render_init(&vr.render_settings, &provider, vr.dump_dir[0] ? vr.dump_dir : NULL);
     vr_perf_init(&vr.perf);
+    vr_rate_init(&vr.rate);
     vr.enabled = true;
     gVrActive = true;
     vr_logf("VR mode on (force_render %d, diag_yaw %.1f, dump_frame %d, timing %d)",
@@ -326,6 +331,8 @@ static bool fade_render(float alpha, const float rgb[3]) {
     return true;
 }
 
+static void rate_update(void);
+
 void vr_frame_end(void) {
     const XrCompositionLayerBaseHeader *probe[1];
     const XrCompositionLayerBaseHeader *const *layers = NULL;
@@ -343,6 +350,7 @@ void vr_frame_end(void) {
         count = 1;
     }
     vr_xr_frame_end(&vr.xr, layers, count);
+    rate_update();
 
     if (vr.render_settings.timing && vr.layers_valid) {
         const vr_render_timing_t *t = vr_render_timing();
@@ -356,6 +364,43 @@ void vr_frame_end(void) {
                 info->mode == VR_MODE_STEREO ? "stereo" : "mono", info->tris_eye[0], info->tris_eye[1], info->tris_hud);
             fflush(stdout);
         }
+    }
+}
+
+// The refresh-rate fallback (standard.md section 9): while worn, two 10 s windows in a row
+// below 90% of the display's rate request the next lower offered rate (120, 90, 72). The
+// choice lasts for the run; the setting in vr.toml is not rewritten. diag_rate_unworn
+// also counts frames without a wearer, for unattended runs.
+static void rate_update(void) {
+    int target = vr_xr_target_refresh_rate(&vr.xr);
+    if (target != vr.rate.target_hz) {
+        vr_rate_set_target(&vr.rate, target);
+    }
+    bool counting = vr.xr.session_running && vr.xr.frame.should_render && (vr.xr.focused || setting("diag_rate_unworn") != 0);
+    double now_s = (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
+    switch (vr_rate_frame(&vr.rate, now_s, counting)) {
+        case VR_RATE_WINDOW_OK:
+            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz", vr.rate.last_fps, VR_RATE_WINDOW_S, vr.rate.target_hz);
+            break;
+        case VR_RATE_WINDOW_LOW:
+            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz is below %.0f%%", vr.rate.last_fps, VR_RATE_WINDOW_S,
+                vr.rate.target_hz, VR_RATE_LOW_FRACTION * 100.0);
+            break;
+        case VR_RATE_FALL_BACK: {
+            int from = vr.rate.target_hz;
+            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz is below %.0f%% for the second window in a row",
+                vr.rate.last_fps, VR_RATE_WINDOW_S, from, VR_RATE_LOW_FRACTION * 100.0);
+            int to = vr_xr_fall_back_refresh_rate(&vr.xr);
+            if (to) {
+                vr_logf("refresh rate: falling back from %d to %d Hz", from, to);
+                vr_rate_set_target(&vr.rate, to);
+            } else {
+                vr_logf("refresh rate: no lower rate to fall back to");
+            }
+            break;
+        }
+        default:
+            break;
     }
 }
 

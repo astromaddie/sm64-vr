@@ -68,6 +68,17 @@ int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted) {
 	return best;
 }
 
+int vr_xr_next_lower_refresh_rate(const float *rates, uint32_t count, int current) {
+	int best = 0;
+	for (uint32_t i = 0; i < count; i++) {
+		int rate = (int)(rates[i] + 0.5f);
+		if (rate < current && rate >= VR_MIN_REFRESH_RATE && rate > best) {
+			best = rate;
+		}
+	}
+	return best;
+}
+
 int64_t vr_xr_choose_color_format(const int64_t *formats, uint32_t count, bool *srgb) {
 	static const int64_t preferred[] = { VR_GL_SRGB8_ALPHA8, VR_GL_SRGB8, VR_GL_RGBA8 };
 	for (size_t p = 0; p < sizeof(preferred) / sizeof(preferred[0]); p++) {
@@ -170,6 +181,8 @@ bool vr_xr_instance_create(vr_xr_t *xr, const vr_xr_api_t *api, const vr_xr_conf
 		if (!load_function(xr, "xrEnumerateDisplayRefreshRatesFB", &xr->api.enumerate_display_refresh_rates) ||
 			!load_function(xr, "xrRequestDisplayRefreshRateFB", &xr->api.request_display_refresh_rate)) {
 			xr->ext_refresh_rate = false;
+		} else if (!load_function(xr, "xrGetDisplayRefreshRateFB", &xr->api.get_display_refresh_rate)) {
+			xr->api.get_display_refresh_rate = NULL; // only used for the log
 		}
 	}
 
@@ -419,28 +432,60 @@ void vr_xr_destroy(vr_xr_t *xr) {
 // -----------------------------------------------------------------------------
 // Session state machine
 
-static void request_refresh_rate(vr_xr_t *xr) {
-	if (!xr->ext_refresh_rate || xr->config.refresh_rate <= 0) {
-		return;
+int vr_xr_request_refresh_rate(vr_xr_t *xr, int wanted) {
+	if (!xr->ext_refresh_rate || wanted <= 0 || xr->session == XR_NULL_HANDLE) {
+		return 0;
 	}
 
-	float rates[VR_MAX_REFRESH_RATES];
 	uint32_t count = 0;
-	if (!check(xr, xr->api.enumerate_display_refresh_rates(xr->session, VR_MAX_REFRESH_RATES, &count, rates), "xrEnumerateDisplayRefreshRatesFB")) {
-		return;
+	if (!check(xr, xr->api.enumerate_display_refresh_rates(xr->session, VR_MAX_REFRESH_RATES, &count, xr->refresh_rates), "xrEnumerateDisplayRefreshRatesFB")) {
+		return 0;
 	}
 	if (count > VR_MAX_REFRESH_RATES) {
 		count = VR_MAX_REFRESH_RATES;
 	}
+	xr->refresh_rate_count = count;
 
-	int chosen = vr_xr_choose_refresh_rate(rates, count, xr->config.refresh_rate);
+	int chosen = vr_xr_choose_refresh_rate(xr->refresh_rates, count, wanted);
 	if (chosen == 0) {
 		vr_logf("the runtime offers no refresh rates");
-		return;
+		return 0;
 	}
-	if (check(xr, xr->api.request_display_refresh_rate(xr->session, (float)chosen), "xrRequestDisplayRefreshRateFB")) {
-		xr->refresh_rate_chosen = chosen;
-		vr_logf("refresh rate: asked for %d Hz, runtime offers %u rates, requested %d Hz", xr->config.refresh_rate, count, chosen);
+	if (!check(xr, xr->api.request_display_refresh_rate(xr->session, (float)chosen), "xrRequestDisplayRefreshRateFB")) {
+		return 0;
+	}
+	xr->refresh_rate_chosen = chosen;
+	xr->refresh_rate_granted = 0; // until the runtime says it switched
+
+	char offered[16 * VR_MAX_REFRESH_RATES] = "";
+	for (uint32_t i = 0; i < count; i++) {
+		size_t used = strlen(offered);
+		snprintf(offered + used, sizeof(offered) - used, "%s%d", i ? "/" : "", (int)(xr->refresh_rates[i] + 0.5f));
+	}
+	float now = 0;
+	if (xr->api.get_display_refresh_rate && XR_SUCCEEDED(xr->api.get_display_refresh_rate(xr->session, &now))) {
+		vr_logf("refresh rate: asked for %d Hz, runtime offers %s Hz, requested %d Hz (running at %.0f Hz so far)", wanted, offered, chosen, now);
+	} else {
+		vr_logf("refresh rate: asked for %d Hz, runtime offers %s Hz, requested %d Hz", wanted, offered, chosen);
+	}
+	return chosen;
+}
+
+int vr_xr_target_refresh_rate(const vr_xr_t *xr) {
+	return xr->refresh_rate_granted > 0 ? xr->refresh_rate_granted : xr->refresh_rate_chosen;
+}
+
+int vr_xr_fall_back_refresh_rate(vr_xr_t *xr) {
+	int next = vr_xr_next_lower_refresh_rate(xr->refresh_rates, xr->refresh_rate_count, vr_xr_target_refresh_rate(xr));
+	if (next == 0) {
+		return 0;
+	}
+	return vr_xr_request_refresh_rate(xr, next);
+}
+
+static void request_refresh_rate(vr_xr_t *xr) {
+	if (xr->config.refresh_rate > 0) {
+		vr_xr_request_refresh_rate(xr, xr->config.refresh_rate);
 	}
 }
 
@@ -512,6 +557,13 @@ void vr_xr_poll_events(vr_xr_t *xr) {
 				xr->recentre_requests++;
 				vr_logf("reference space change pending");
 				break;
+
+			case XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB: {
+				const XrEventDataDisplayRefreshRateChangedFB *e = (const XrEventDataDisplayRefreshRateChangedFB *)&ev;
+				xr->refresh_rate_granted = (int)(e->toDisplayRefreshRate + 0.5f);
+				vr_logf("refresh rate: the display changed from %.0f to %.0f Hz", e->fromDisplayRefreshRate, e->toDisplayRefreshRate);
+				break;
+			}
 
 			default:
 				break;

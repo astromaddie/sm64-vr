@@ -919,8 +919,8 @@ static void test_force_render_in_standby(void) {
 	const XrCompositionLayerBaseHeader *layers[1] = { (const XrCompositionLayerBaseHeader *)&quad };
 	CHECK(one_frame(&xr, layers, 1));
 	CHECK(!xr.frame.should_render);
-	CHECK(xr.frame.views_valid); // synthetic head at 1.6 m
-	CHECK_NEAR(xr.frame.views[0].pose.position[1], 1.6, 1e-6);
+	CHECK(xr.frame.views_valid); // synthetic head at the LOCAL origin (LOCAL is head-relative)
+	CHECK_NEAR(xr.frame.views[0].pose.position[1], 0.0, 1e-6);
 	CHECK_NEAR(xr.frame.views[1].pose.position[0] - xr.frame.views[0].pose.position[0], 0.064, 1e-6);
 	CHECK_INT(fake.last_layer_count, 1);
 	CHECK(vr_xr_sim_active(&xr)); // unattended tests need the game to run
@@ -1117,6 +1117,74 @@ static void test_refresh_rate_request(void) {
 	vr_xr_destroy(&xr);
 }
 
+static void push_rate_change(float from, float to) {
+	XrEventDataDisplayRefreshRateChangedFB ev = {
+		.type = XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB,
+		.fromDisplayRefreshRate = from,
+		.toDisplayRefreshRate = to
+	};
+	push_event(&ev, sizeof(ev));
+}
+
+static void test_refresh_rate_fallback(void) {
+	vr_xr_t xr;
+	float rates[4] = { 72, 90, 120, 144 };
+
+	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 144), 120);
+	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 120), 90);
+	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 90), 72);
+	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 72), 0);
+	float low[2] = { 60, 90 };
+	CHECK_INT(vr_xr_next_lower_refresh_rate(low, 2, 90), 0); // never below 72
+	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 0, 120), 0);
+
+	// 120 is the default; the ladder is 120, 90, 72
+	fake_reset();
+	fake.refresh_rates[0] = 72; fake.refresh_rates[1] = 90; fake.refresh_rates[2] = 120; fake.refresh_rates[3] = 144;
+	fake.refresh_rate_count = 4;
+	CHECK(make_host(&xr, 1.25f, 120, false));
+	push_state(XR_SESSION_STATE_READY);
+	vr_xr_poll_events(&xr);
+	CHECK_NEAR(fake.requested_refresh, 120, 1e-6);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 120);
+	push_rate_change(72, 120);
+	vr_xr_poll_events(&xr);
+	CHECK_INT(xr.refresh_rate_granted, 120);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 120);
+
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 90);
+	CHECK_NEAR(fake.requested_refresh, 90, 1e-6);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90); // the request, until the runtime reports
+	push_rate_change(120, 90);
+	vr_xr_poll_events(&xr);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90);
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 72);
+	CHECK_NEAR(fake.requested_refresh, 72, 1e-6);
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0); // nothing lower
+	CHECK_NEAR(fake.requested_refresh, 72, 1e-6);
+	vr_xr_destroy(&xr);
+
+	// the runtime offers only 72 and 90 (off-head, SteamVR's per-app rate): 120 asked, 90 granted
+	fake_reset();
+	fake.refresh_rate_count = 2; // 72 and 90
+	CHECK(make_host(&xr, 1.25f, 120, false));
+	push_state(XR_SESSION_STATE_READY);
+	vr_xr_poll_events(&xr);
+	CHECK_NEAR(fake.requested_refresh, 90, 1e-6);
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 72);
+	vr_xr_destroy(&xr);
+
+	// no extension: nothing to fall back to
+	fake_reset();
+	fake.offers_refresh = false;
+	CHECK(make_host(&xr, 1.25f, 120, false));
+	push_state(XR_SESSION_STATE_READY);
+	vr_xr_poll_events(&xr);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 0);
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0);
+	vr_xr_destroy(&xr);
+}
+
 static void test_runtime_failures(void) {
 	vr_xr_t xr;
 
@@ -1207,6 +1275,7 @@ int main(void) {
 	RUN(test_reference_space_change);
 	RUN(test_dt_from_display_time);
 	RUN(test_refresh_rate_request);
+	RUN(test_refresh_rate_fallback);
 	RUN(test_runtime_failures);
 	RUN(test_destroy_order);
 	RUN(test_log_lines);
