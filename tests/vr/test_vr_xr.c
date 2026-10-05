@@ -1136,19 +1136,10 @@ static void push_rate_change(float from, float to) {
 	push_event(&ev, sizeof(ev));
 }
 
-static void test_refresh_rate_fallback(void) {
+static void test_refresh_rate_request_once(void) {
 	vr_xr_t xr;
-	float rates[4] = { 72, 90, 120, 144 };
 
-	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 144), 120);
-	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 120), 90);
-	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 90), 72);
-	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 4, 72), 0);
-	float low[2] = { 60, 90 };
-	CHECK_INT(vr_xr_next_lower_refresh_rate(low, 2, 90), 0); // never below 72
-	CHECK_INT(vr_xr_next_lower_refresh_rate(rates, 0, 120), 0);
-
-	// 120 is the default; the ladder is 120, 90, 72
+	// 120 is the default; with 120 offered it is requested, once, and the runtime's event is the target
 	fake_reset();
 	fake.refresh_rates[0] = 72; fake.refresh_rates[1] = 90; fake.refresh_rates[2] = 120; fake.refresh_rates[3] = 144;
 	fake.refresh_rate_count = 4;
@@ -1156,32 +1147,23 @@ static void test_refresh_rate_fallback(void) {
 	push_state(XR_SESSION_STATE_READY);
 	vr_xr_poll_events(&xr);
 	CHECK_NEAR(fake.requested_refresh, 120, 1e-6);
+	CHECK_INT(fake.request_refresh_calls, 1);
 	CHECK_INT(vr_xr_target_refresh_rate(&xr), 120);
-	push_rate_change(72, 120);
+	push_rate_change(72, 90);
 	vr_xr_poll_events(&xr);
-	CHECK_INT(xr.refresh_rate_granted, 120);
-	CHECK_INT(vr_xr_target_refresh_rate(&xr), 120);
-
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 90);
-	CHECK_NEAR(fake.requested_refresh, 90, 1e-6);
-	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90); // the request, until the runtime reports
-	push_rate_change(120, 90);
-	vr_xr_poll_events(&xr);
+	CHECK_INT(xr.refresh_rate_granted, 90);
 	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90);
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 72);
-	CHECK_NEAR(fake.requested_refresh, 72, 1e-6);
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0); // nothing lower
-	CHECK_NEAR(fake.requested_refresh, 72, 1e-6);
+	CHECK_INT(fake.request_refresh_calls, 1); // no retry, no ladder
 	vr_xr_destroy(&xr);
 
-	// the runtime offers only 72 and 90 (off-head, SteamVR's per-app rate): 120 asked, 90 granted
+	// only 72 and 90 offered: the request is for an offered rate (90), never for 120
 	fake_reset();
-	fake.refresh_rate_count = 2; // 72 and 90
+	fake.refresh_rate_count = 2;
 	CHECK(make_host(&xr, 1.25f, 120, false));
 	push_state(XR_SESSION_STATE_READY);
 	vr_xr_poll_events(&xr);
 	CHECK_NEAR(fake.requested_refresh, 90, 1e-6);
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 72);
+	CHECK_INT(fake.request_refresh_calls, 1);
 	vr_xr_destroy(&xr);
 
 	// SteamVR offers only the app's per-app rate and is running at it: no request (it would be an error)
@@ -1194,17 +1176,16 @@ static void test_refresh_rate_fallback(void) {
 	vr_xr_poll_events(&xr);
 	CHECK_INT(fake.request_refresh_calls, 0);
 	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90);
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0);
 	vr_xr_destroy(&xr);
 
-	// no extension: nothing to fall back to
+	// no extension: no request
 	fake_reset();
 	fake.offers_refresh = false;
 	CHECK(make_host(&xr, 1.25f, 120, false));
 	push_state(XR_SESSION_STATE_READY);
 	vr_xr_poll_events(&xr);
+	CHECK_INT(fake.request_refresh_calls, 0);
 	CHECK_INT(vr_xr_target_refresh_rate(&xr), 0);
-	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0);
 	vr_xr_destroy(&xr);
 }
 
@@ -1298,7 +1279,7 @@ int main(void) {
 	RUN(test_reference_space_change);
 	RUN(test_dt_from_display_time);
 	RUN(test_refresh_rate_request);
-	RUN(test_refresh_rate_fallback);
+	RUN(test_refresh_rate_request_once);
 	RUN(test_runtime_failures);
 	RUN(test_destroy_order);
 	RUN(test_log_lines);

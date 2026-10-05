@@ -6,6 +6,7 @@ void vr_rate_init(vr_rate_t *r) {
 	r->start_s = 0;
 	r->frames = 0;
 	r->low_windows = 0;
+	r->reported = false;
 	r->last_fps = 0;
 }
 
@@ -41,9 +42,10 @@ vr_rate_result_t vr_rate_frame(vr_rate_t *r, double now_s, bool counting) {
 		r->low_windows = 0;
 		return VR_RATE_WINDOW_OK;
 	}
-	if (++r->low_windows >= VR_RATE_LOW_WINDOWS) {
+	if (++r->low_windows >= VR_RATE_LOW_WINDOWS && !r->reported) {
 		r->low_windows = 0;
-		return VR_RATE_FALL_BACK;
+		r->reported = true;
+		return VR_RATE_NOT_HELD;
 	}
 	return VR_RATE_WINDOW_LOW;
 }

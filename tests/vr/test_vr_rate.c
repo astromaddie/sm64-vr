@@ -28,15 +28,30 @@ static void test_holds(void) {
 	CHECK_INT(r.low_windows, 0);
 }
 
-static void test_two_low_windows_fall_back(void) {
+static void test_two_low_windows_are_reported(void) {
 	vr_rate_t r;
 	double t = 0;
 	vr_rate_init(&r);
 	vr_rate_set_target(&r, 120);
 	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW); // 83%
 	CHECK_INT(r.low_windows, 1);
-	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_FALL_BACK);
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_NOT_HELD);
 	CHECK_INT(r.low_windows, 0);
+}
+
+static void test_reported_once(void) {
+	vr_rate_t r;
+	double t = 0;
+	vr_rate_init(&r);
+	vr_rate_set_target(&r, 120);
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW);
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_NOT_HELD);
+	// still slow: never reported again, not even after a new target (the run's one report)
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW);
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW);
+	vr_rate_set_target(&r, 90);
+	CHECK_INT(run(&r, &t, 60, 10.1, true), VR_RATE_WINDOW_LOW);
+	CHECK_INT(run(&r, &t, 60, 10.1, true), VR_RATE_WINDOW_LOW);
 }
 
 static void test_good_window_between_resets_the_run(void) {
@@ -47,7 +62,7 @@ static void test_good_window_between_resets_the_run(void) {
 	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW);
 	CHECK_INT(run(&r, &t, 120, 10.1, true), VR_RATE_WINDOW_OK);
 	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_WINDOW_LOW); // the count began again
-	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_FALL_BACK);
+	CHECK_INT(run(&r, &t, 100, 10.1, true), VR_RATE_NOT_HELD);
 }
 
 static void test_unworn_frames_do_not_count(void) {
@@ -92,7 +107,8 @@ static void test_no_target_watches_nothing(void) {
 
 int main(void) {
 	RUN(test_holds);
-	RUN(test_two_low_windows_fall_back);
+	RUN(test_two_low_windows_are_reported);
+	RUN(test_reported_once);
 	RUN(test_good_window_between_resets_the_run);
 	RUN(test_unworn_frames_do_not_count);
 	RUN(test_window_length);

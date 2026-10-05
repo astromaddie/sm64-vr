@@ -54,7 +54,7 @@ static struct {
 
     vr_perf_t perf;
     double tick_ms;
-    vr_rate_t rate; // the automatic refresh-rate fallback
+    vr_rate_t rate; // is the display rate held? (reported once)
 } vr;
 
 static float setting(const char *name) {
@@ -367,12 +367,13 @@ void vr_frame_end(void) {
     }
 }
 
-// The refresh-rate fallback (standard.md section 9): while worn, two 10 s windows in a row
-// below 90% of the display's rate request the next lower offered rate (120, 90, 72). The
-// choice lasts for the run; the setting in vr.toml is not rewritten. diag_rate_unworn
-// also counts frames without a wearer, for unattended runs.
+// Is the display rate held? (standard.md section 9) The app can't change the rate on the Frame:
+// SteamVR runs the title at its per-app rate. While worn, two 10 s windows in a row below 90% of the
+// display's rate are reported once, with the per-app rate to set instead. The display rate is the
+// runtime's frame period. diag_rate_unworn also counts frames without a wearer, for unattended runs.
 static void rate_update(void) {
-    int target = vr_xr_target_refresh_rate(&vr.xr);
+    int64_t period = vr.xr.frame.predicted_display_period;
+    int target = period > 0 ? (int)(1e9 / (double)period + 0.5) : vr_xr_target_refresh_rate(&vr.xr);
     if (target != vr.rate.target_hz) {
         vr_rate_set_target(&vr.rate, target);
     }
@@ -382,24 +383,22 @@ static void rate_update(void) {
     double now_s = (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
     switch (vr_rate_frame(&vr.rate, now_s, counting)) {
         case VR_RATE_WINDOW_OK:
-            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz (frame period %.2f ms = %.1f Hz)", vr.rate.last_fps,
-                VR_RATE_WINDOW_S, vr.rate.target_hz, (double)vr.xr.frame.predicted_display_period * 1e-6,
-                vr.xr.frame.predicted_display_period > 0 ? 1e9 / (double)vr.xr.frame.predicted_display_period : 0.0);
+            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz (frame period %.2f ms)", vr.rate.last_fps,
+                VR_RATE_WINDOW_S, vr.rate.target_hz, (double)period * 1e-6);
             break;
         case VR_RATE_WINDOW_LOW:
             vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz is below %.0f%%", vr.rate.last_fps, VR_RATE_WINDOW_S,
                 vr.rate.target_hz, VR_RATE_LOW_FRACTION * 100.0);
             break;
-        case VR_RATE_FALL_BACK: {
-            int from = vr.rate.target_hz;
-            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz is below %.0f%% for the second window in a row",
-                vr.rate.last_fps, VR_RATE_WINDOW_S, from, VR_RATE_LOW_FRACTION * 100.0);
-            int to = vr_xr_fall_back_refresh_rate(&vr.xr);
-            if (to) {
-                vr_logf("refresh rate: falling back from %d to %d Hz", from, to);
-                vr_rate_set_target(&vr.rate, to);
+        case VR_RATE_NOT_HELD: {
+            int hz = vr.rate.target_hz;
+            vr_logf("refresh rate: the frame rate is not held: %.1f fps over %.0f s at %d Hz, below %.0f%% for two windows in a row",
+                vr.rate.last_fps, VR_RATE_WINDOW_S, hz, VR_RATE_LOW_FRACTION * 100.0);
+            if (hz > 72) {
+                vr_logf("refresh rate: the app can't change the rate; set the SM64 title to %d Hz in SteamVR's per-app settings "
+                    "(or lower resolution_scale)", hz > 90 ? 90 : 72);
             } else {
-                vr_logf("refresh rate: no lower rate to fall back to");
+                vr_logf("refresh rate: already at the lowest rate; lower resolution_scale");
             }
             break;
         }

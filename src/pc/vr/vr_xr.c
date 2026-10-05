@@ -68,17 +68,6 @@ int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted) {
 	return best;
 }
 
-int vr_xr_next_lower_refresh_rate(const float *rates, uint32_t count, int current) {
-	int best = 0;
-	for (uint32_t i = 0; i < count; i++) {
-		int rate = (int)(rates[i] + 0.5f);
-		if (rate < current && rate >= VR_MIN_REFRESH_RATE && rate > best) {
-			best = rate;
-		}
-	}
-	return best;
-}
-
 int64_t vr_xr_choose_color_format(const int64_t *formats, uint32_t count, bool *srgb) {
 	static const int64_t preferred[] = { VR_GL_SRGB8_ALPHA8, VR_GL_SRGB8, VR_GL_RGBA8 };
 	for (size_t p = 0; p < sizeof(preferred) / sizeof(preferred[0]); p++) {
@@ -481,14 +470,6 @@ int vr_xr_request_refresh_rate(vr_xr_t *xr, int wanted) {
 
 int vr_xr_target_refresh_rate(const vr_xr_t *xr) {
 	return xr->refresh_rate_granted > 0 ? xr->refresh_rate_granted : xr->refresh_rate_chosen;
-}
-
-int vr_xr_fall_back_refresh_rate(vr_xr_t *xr) {
-	int next = vr_xr_next_lower_refresh_rate(xr->refresh_rates, xr->refresh_rate_count, vr_xr_target_refresh_rate(xr));
-	if (next == 0) {
-		return 0;
-	}
-	return vr_xr_request_refresh_rate(xr, next);
 }
 
 static void request_refresh_rate(vr_xr_t *xr) {

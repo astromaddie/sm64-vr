@@ -22,7 +22,6 @@
 
 #define VR_SWAPCHAIN_MAX_IMAGES 8
 #define VR_MAX_REFRESH_RATES 16
-#define VR_MIN_REFRESH_RATE 72 // the lowest rate the automatic fallback steps to
 
 #define VR_GL_SRGB8_ALPHA8 0x8C43
 #define VR_GL_SRGB8 0x8C41
@@ -172,21 +171,16 @@ uint32_t vr_xr_scaled_size(uint32_t recommended, uint32_t max, float scale);
 // `wanted`, the lower one on a tie. 0 when there are none.
 int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted);
 
-// Pure: the highest offered rate below `current` and not below VR_MIN_REFRESH_RATE (the
-// automatic fallback's next step: 120, then 90, then 72). 0 when there is none.
-int vr_xr_next_lower_refresh_rate(const float *rates, uint32_t count, int current);
-
 // Asks the runtime for the offered rate nearest `wanted` (xrRequestDisplayRefreshRateFB),
-// remembering the offered list. Returns the rate requested, 0 when nothing was requested.
+// remembering the offered list. Called once, at the start of the session: on the Frame SteamVR
+// offers only the title's per-app rate, so the request can't change it (standard.md section 9).
+// Nothing is requested when the display already runs at that rate. Returns the rate requested
+// or already running, 0 when none.
 int vr_xr_request_refresh_rate(vr_xr_t *xr, int wanted);
 
 // The rate the display should now be running at: what the runtime reported switching to,
 // else what was requested. 0 when no rate was requested.
 int vr_xr_target_refresh_rate(const vr_xr_t *xr);
-
-// Steps down to the next lower offered rate. Returns the new rate, 0 when there is none
-// (already at the floor, or the extension is unavailable).
-int vr_xr_fall_back_refresh_rate(vr_xr_t *xr);
 
 // Pure: SRGB8_ALPHA8, else SRGB8, else RGBA8 (then *srgb is false); 0 when none is offered.
 int64_t vr_xr_choose_color_format(const int64_t *formats, uint32_t count, bool *srgb);

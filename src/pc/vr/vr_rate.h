@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 
-// The automatic refresh-rate fallback (standard.md section 9): while the headset is worn,
-// two windows of 10 s in a row in which the frame rate stays below 90% of the display's
-// rate step the request down (120, then 90, then 72). Pure bookkeeping; vr.c feeds it
-// frames and acts on the result.
+// Is the display rate held? (standard.md section 9) While the headset is worn, two windows of
+// 10 s in a row in which the frame rate stays below 90% of the display's rate mean it isn't;
+// that is reported once per run, with a recommendation to lower the title's per-app rate in
+// SteamVR (the app can't change the rate itself). Pure bookkeeping; vr.c feeds it frames.
 
 #define VR_RATE_WINDOW_S 10.0
 #define VR_RATE_LOW_FRACTION 0.9
@@ -18,6 +18,7 @@ typedef struct {
 	double start_s;
 	unsigned frames;
 	int low_windows; // consecutive windows below the threshold
+	bool reported; // VR_RATE_NOT_HELD was returned once; it never is again
 	double last_fps; // of the window that closed last
 } vr_rate_t;
 
@@ -25,7 +26,7 @@ typedef enum {
 	VR_RATE_NONE = 0, // the window is still open
 	VR_RATE_WINDOW_OK, // a window closed at or above the threshold
 	VR_RATE_WINDOW_LOW, // a window closed below it; one more such window is allowed
-	VR_RATE_FALL_BACK // the second low window in a row: step the rate down
+	VR_RATE_NOT_HELD // the second low window in a row, the first time: say so once
 } vr_rate_result_t;
 
 void vr_rate_init(vr_rate_t *r);

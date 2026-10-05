@@ -31,8 +31,8 @@ static const sfvr_setting_key port_keys[] = {
 	// Diagnostic: render the main menu's background level in stereo (with the
 	// menu on the HUD quad), for unattended eye dumps without input.
 	{ "diag_menu_stereo", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
-	// Diagnostic: count the refresh-rate fallback's 10 s windows without a wearer
-	// (unattended runs), so the fallback can be watched on the device.
+	// Diagnostic: count the 10 s windows of the refresh-rate check without a wearer
+	// (unattended runs), so the check can be watched on the device.
 	{ "diag_rate_unworn", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
 	// Diagnostic: dump the Nth stereo frame rendered from tracked views (a worn
 	// headset), as dump_frame does for any frame. 0 = off.

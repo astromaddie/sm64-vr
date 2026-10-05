@@ -30,16 +30,23 @@ launches.
 
 ## 3. Display (standard.md section 9)
 
-- **Refresh rate.** `refresh_rate` defaults to 120. At the READY state the port calls
-  `xrEnumerateDisplayRefreshRatesFB` and requests the offered rate nearest the setting with
-  `xrRequestDisplayRefreshRateFB`. It logs what was offered and requested, and the runtime's change
-  event (`refresh rate: the display changed from A to B Hz`) when SteamVR confirms.
-- **Automatic fallback.** `vr_rate.c` counts shown frames in 10 s windows while the headset is worn
-  (session FOCUSED and `shouldRender`). Two windows in a row below 90% of the display's rate request the
-  next lower offered rate (120, then 90, then 72, never below 72), and log it
-  (`refresh rate: falling back from 120 to 90 Hz`). The choice lasts for the run; `vr.toml` is not
-  rewritten. Standby, taking the headset off and a rate change start the count over.
-  `diag_rate_unworn = true` counts windows without a wearer, for unattended runs.
+- **The app can't change the rate on the Frame.** SteamVR offers an app one rate: the title's per-app
+  preferred rate (`steam.app.<id>` in `steamvr.vrsettings`), applied to Steam-title launches only. The user
+  sets it once, in SteamVR's per-app settings in the headset. **Recommended for this title: 120 Hz.** The
+  unattended measurement below suggests it fits (GPU 3.3 ms, CPU 2.7 ms against 8.33 ms), but 120 has not
+  been run, so this is a recommendation, not a measurement.
+- **Request.** `refresh_rate` (default 120) is the requested rate where a runtime honours it. At the READY
+  state the port enumerates the offered rates and, once, requests the offered rate nearest the setting with
+  `xrRequestDisplayRefreshRateFB`, unless the display already runs at it (SteamVR answers that with an
+  error). There is no retry and no fallback ladder, because the request can't take effect. The log has the
+  offered rates, the rate the display runs at, and the runtime's change event if one comes.
+- **Is the rate held?** `vr_rate.c` counts shown frames in 10 s windows while the headset is worn (session
+  FOCUSED and `shouldRender`) against the display's rate, taken from the runtime's frame period (not from
+  the extension's list). After two windows in a row below 90%, it logs once per run that the frame rate is
+  not held and which per-app rate to set instead (the next one down, 90 or 72; at 72, lower
+  `resolution_scale`). Standby, taking the headset off and a rate change start the count over.
+  `diag_rate_unworn = true` counts windows without a wearer, for unattended runs. Each window otherwise
+  logs `refresh rate: N fps over 10 s at R Hz`.
 - **Resolution.** Each eye has its own swapchain, created at the runtime's recommended size times
   `resolution_scale` and rendered into directly: the replay binds the swapchain image as its framebuffer.
   There is no larger intermediate target and no blit. The Frame recommends 1728 x 1728, so the default
@@ -75,7 +82,7 @@ Environment variables `SM64_VR_<KEY>` override a key for one run. Diagnostics: `
 `probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, and `timing` for the `[vr-perf]` line every 10 s
 (`fps`, `missed`, `cpu`, `tick`, `replay`, `hud`, `eye`, `gpu`). The stages are CPU submission times;
 `gpu` is the GPU time of the eye and HUD passes from timestamp queries read a few frames late. While
-the refresh-rate fallback runs it logs `refresh rate: N fps over 10 s at R Hz (frame period ...)` each window.
+the rate check runs it logs `refresh rate: N fps over 10 s at R Hz (frame period ...)` each window.
 
 ## 7. Measurements
 
@@ -85,26 +92,35 @@ Unattended, headset on the desk (`force_render`), launched through Steam as the 
 | Item | Result |
 | --- | --- |
 | Offered by `xrEnumerateDisplayRefreshRatesFB` | 90 Hz only (SteamVR offers an app its per-app rate; this title's `preferredRefreshRate` in `steamvr.vrsettings` is 90) |
-| Granted | 90 Hz: frame period 11.11 ms. The request for 120 can only be honoured once the per-app rate is 120 |
+| Granted | 90 Hz: frame period 11.11 ms (the per-app rate; the request for 120 had nothing to act on) |
 | Eye swapchains | 2160 x 2160 each (recommended 1728 x 1728 x 1.25, maximum 8192) |
 | Frame rate | 90.0 fps, `missed=0`, in every window of two runs (about 20 windows of 10 s) |
 | CPU (`[vr-perf]`) | 2.6 to 2.8 ms: tick 0.12, replay 2.1 (eyes 0.8 and 1.25), hud 0.5 |
 | GPU (`[vr-perf]`) | 3.3 ms for both eyes and the HUD at 90 Hz |
 
 3.3 ms GPU and 2.7 ms CPU against an 8.33 ms period at 120 Hz leave room, but 120 Hz itself has not been
-measured: no run could get the display above 90 Hz, because the per-app setting is 90. To get 120, set the
-title's per-app refresh rate to 120 in SteamVR's own settings (as for the Half-Life title); the file is
-read at SteamVR start, so editing it while SteamVR runs does nothing. The port's default request stays
-120. The live fallback step (120 to 90 to 72) has not been seen on the device, since only one rate was
-offered; its window logic and the rate stepping are unit-tested (`tests/vr/test_vr_rate.c`,
-`test_vr_xr.c`). Heavier scenes (Bob-omb Battlefield) were not run: the unattended run has no input.
+measured: the display stayed at 90 Hz because the per-app setting is 90 and the app can't change it. The
+live "not held" report has not been seen on the device, since the rate was held; the window logic is
+unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb Battlefield) were not run: the unattended run has no input.
 
-## 8. Status table
+## 8. Wear checklist (at most 15 minutes)
+
+0. In SteamVR's per-app settings, **set the SM64 title to 120 Hz** (it is 90 now), then launch it from Steam.
+   Check the log (`deploy.sh --logs`) for `frame period 8.33 ms` and `refresh rate: ... at 120 Hz`.
+1. Menus on the flat panel: file select, pause, the course and act select (stereo).
+2. Castle Grounds start to the first painting: sharpness of the world and the HUD at 2160 per eye.
+3. Enter a course (Bob-omb Battlefield): the warp fade, then play for a few minutes, looking at frame
+   smoothness. Note any `refresh rate: ... not held` line in the log.
+4. Snap and smooth turning, recentre (hold L View), haptics.
+5. Say whether 120 felt held; if not, which scene dropped.
+
+## 9. Status table
 
 | Feature | State |
 | --- | --- |
-| 120 Hz request, enumerated rates, change event logged | headset-unverified |
-| Automatic fallback 120 / 90 / 72 (window logic unit-tested; the window counting runs on the device at 90 Hz, the step down not seen) | headset-unverified |
+| Single refresh-rate request for an offered rate, offered rates and change event logged | headset-unverified |
+| "Rate not held" report after two low windows (window logic unit-tested; the counting runs on the device at 90 Hz, the report not seen) | headset-unverified |
+| Title runs at 120 Hz with the per-app rate set to 120 | not started (needs the per-app setting, then a run) |
 | `[vr-perf]` GPU time from timestamp queries | headset-unverified (read unattended) |
 | 2160 x 2160 eye swapchains, rendered directly | headset-unverified |
 | `refresh_rate` / `resolution_scale` settings and v1 to v2 migration (unit-tested) | headset-unverified |
