@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 /* The version of this key set; ports store it as the file's schema `version`. */
-#define SFVR_SETTINGS_SCHEMA 1
+#define SFVR_SETTINGS_SCHEMA 2 /* 2: refresh_rate defaults to 120 and resolution_scale to 1.25 (standard.md section 9) */
 
 typedef enum sfvr_setting_type {
 	SFVR_SETTING_BOOL = 0,

@@ -66,8 +66,9 @@ static const char *no_env(const char *name) {
 static void test_registry(void) {
 	// the standard keys the doc's section 7 lists, and the port's own
 	const char *names[] = {
-		"world_scale", "follow_vehicle_rotation", "horizon_lock", "hud_mode", "hud_distance", "hud_scale",
-		"force_mono", "diag_attract_stereo", "panel_distance", "panel_width",
+		"world_scale", "level_pitch", "star_select_scale", "fov_mode", "diag_rate_unworn",
+		"follow_vehicle_rotation", "horizon_lock", "hud_mode", "hud_distance", "hud_scale",
+		"force_mono", "panel_distance", "panel_width",
 		"resolution_scale", "refresh_rate", "probe_seconds", "force_render", "diag_yaw", "dump_frame", "timing",
 		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand"
 	};
@@ -77,21 +78,21 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 5);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 10);
 
 	// env names
 	char name[64];
-	CHECK(sfvr_settings_env_name("WIPEOUT", "resolution_scale", name, sizeof(name)));
-	CHECK_STR(name, "WIPEOUT_VR_RESOLUTION_SCALE");
+	CHECK(sfvr_settings_env_name("SM64", "resolution_scale", name, sizeof(name)));
+	CHECK_STR(name, "SM64_VR_RESOLUTION_SCALE");
 }
 
 static void test_defaults_and_creation(void) {
 	vr_settings_t s;
 	CHECK_INT(parse(&s, ""), (int)vr_settings_count() + 1); // every key and the version
 	CHECK_NEAR(get(&s, "snap_angle"), 30, 1e-9);
-	CHECK_NEAR(get(&s, "resolution_scale"), 1.0, 1e-9);
-	CHECK_NEAR(get(&s, "refresh_rate"), 90, 1e-9);
-	CHECK_NEAR(get(&s, "world_scale"), 128, 1e-9);
+	CHECK_NEAR(get(&s, "resolution_scale"), 1.25, 1e-9); // about 2160 px an eye
+	CHECK_NEAR(get(&s, "refresh_rate"), 120, 1e-9);
+	CHECK_NEAR(get(&s, "world_scale"), 104, 1e-9);
 	CHECK_NEAR(get(&s, "force_mono"), 0, 1e-9);
 	CHECK_NEAR(get(&s, "panel_distance"), 2.0, 1e-9);
 	CHECK_NEAR(get(&s, "probe_seconds"), 0, 1e-9);
@@ -99,15 +100,15 @@ static void test_defaults_and_creation(void) {
 	CHECK_NEAR(get(&s, "nonsense"), 0, 1e-9);
 
 	char *text = format(&s);
-	CHECK(has(text, "version = 1\n"));
+	CHECK(has(text, "version = 2\n"));
 	CHECK(has(text, "[vr]\n"));
 	CHECK(has(text, "turn_mode = \"snap\"\n"));
 	CHECK(has(text, "snap_angle = 30\n"));
-	CHECK(has(text, "resolution_scale = 1.0\n"));
+	CHECK(has(text, "resolution_scale = 1.25\n"));
 	CHECK(has(text, "vignette = false\n"));
-	CHECK(has(text, "world_scale = 128.0\n"));
+	CHECK(has(text, "world_scale = 104.0\n"));
 	CHECK(has(text, "hud_mode = \"near\"\n"));
-	CHECK(has(text, "WIPEOUT_VR_<KEY>"));
+	CHECK(has(text, "SM64_VR_<KEY>"));
 
 	// what was written reads back with nothing to repair, and is a fixed point
 	vr_settings_t back;
@@ -126,7 +127,7 @@ static void test_defaults_and_creation(void) {
 static void test_missing_keys_get_defaults(void) {
 	vr_settings_t s;
 	const char *file =
-		"version = 1\n"
+		"version = 2\n"
 		"\n"
 		"[vr]\n"
 		"snap_angle = 45   # my favourite\n"
@@ -135,13 +136,13 @@ static void test_missing_keys_get_defaults(void) {
 	CHECK_INT(repairs, (int)vr_settings_count() - 2);
 	CHECK_NEAR(get(&s, "snap_angle"), 45, 1e-9);
 	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
-	CHECK_NEAR(get(&s, "resolution_scale"), 1.0, 1e-9);
+	CHECK_NEAR(get(&s, "resolution_scale"), 1.25, 1e-9);
 
 	char *text = format(&s);
 	// the user's lines are untouched, comment included; the rest is added in [vr]
 	CHECK(has(text, "snap_angle = 45   # my favourite\n"));
 	CHECK(has(text, "turn_mode = \"smooth\"\n"));
-	CHECK(has(text, "refresh_rate = 90\n"));
+	CHECK(has(text, "refresh_rate = 120\n"));
 	CHECK(strstr(text, "refresh_rate") > strstr(text, "[vr]"));
 	vr_settings_t back;
 	CHECK_INT(parse(&back, text), 0);
@@ -153,7 +154,7 @@ static void test_missing_keys_get_defaults(void) {
 static void test_bad_values_are_clamped_or_defaulted(void) {
 	vr_settings_t s;
 	const char *file =
-		"version = 1\n"
+		"version = 2\n"
 		"[vr]\n"
 		"snap_angle = 500\n"             // above the range: 90
 		"smooth_turn_speed = 1\n"        // below: 30
@@ -244,8 +245,8 @@ static void test_unknown_content_is_kept(void) {
 	// the added keys went into [vr], before [later]
 	CHECK(strstr(text, "refresh_rate") > strstr(text, "[vr]"));
 	CHECK(strstr(text, "refresh_rate") < strstr(text, "[later]"));
-	CHECK(strstr(text, "version = 1") != NULL);
-	CHECK(strstr(text, "version = 1") < strstr(text, "[game]"));
+	CHECK(strstr(text, "version = 2") != NULL);
+	CHECK(strstr(text, "version = 2") < strstr(text, "[game]"));
 
 	// the first lines stay on top: the version goes after the comment block
 	CHECK(strncmp(text, "# my notes\n", 11) == 0);
@@ -260,14 +261,14 @@ static void test_version(void) {
 	parse(&s, "[vr]\nsnap_angle = 30\n");
 	CHECK_INT(s.file_version, 0);
 	text = format(&s);
-	CHECK(has(text, "version = 1\n"));
-	CHECK(strstr(text, "version = 1") < strstr(text, "[vr]"));
+	CHECK(has(text, "version = 2\n"));
+	CHECK(strstr(text, "version = 2") < strstr(text, "[vr]"));
 	free(text);
 	vr_settings_free(&s);
 
 	parse(&s, "version = 0\n[vr]\n");
 	text = format(&s);
-	CHECK(has(text, "version = 1\n"));
+	CHECK(has(text, "version = 2\n"));
 	CHECK(!has(text, "version = 0"));
 	free(text);
 	vr_settings_free(&s);
@@ -286,7 +287,7 @@ static void test_duplicates_and_odd_files(void) {
 	char *text;
 
 	// the first of a duplicated key wins; the second is dropped
-	parse(&s, "version = 1\n[vr]\nsnap_angle = 20\nsnap_angle = 80\n");
+	parse(&s, "version = 2\n[vr]\nsnap_angle = 20\nsnap_angle = 80\n");
 	CHECK_NEAR(get(&s, "snap_angle"), 20, 1e-9);
 	text = format(&s);
 	CHECK(has(text, "snap_angle = 20\n"));
@@ -295,7 +296,7 @@ static void test_duplicates_and_odd_files(void) {
 	vr_settings_free(&s);
 
 	// CRLF line endings and no final newline
-	parse(&s, "version = 1\r\n[vr]\r\nsnap_angle = 75\r\nvignette = true");
+	parse(&s, "version = 2\r\n[vr]\r\nsnap_angle = 75\r\nvignette = true");
 	CHECK_NEAR(get(&s, "snap_angle"), 75, 1e-9);
 	CHECK_NEAR(get(&s, "vignette"), 1, 1e-9);
 	text = format(&s);
@@ -307,7 +308,7 @@ static void test_duplicates_and_odd_files(void) {
 	vr_settings_free(&back);
 
 	// garbage lines are not keys and not an error
-	parse(&s, "version = 1\n[vr]\n= = =\nsnap_angle 45\nsnap_angle = 45\n");
+	parse(&s, "version = 2\n[vr]\n= = =\nsnap_angle 45\nsnap_angle = 45\n");
 	CHECK_NEAR(get(&s, "snap_angle"), 45, 1e-9);
 	vr_settings_free(&s);
 
@@ -332,17 +333,17 @@ static const char *fake_getenv(const char *name) {
 
 static void test_env_overrides(void) {
 	vr_settings_t s;
-	parse(&s, "version = 1\n[vr]\nresolution_scale = 1.1\nsnap_angle = 45\n");
+	parse(&s, "version = 2\n[vr]\nresolution_scale = 1.1\nsnap_angle = 45\n");
 
 	env_count = 0;
 #define SET_ENV(n, v) do { env_names[env_count] = n; env_values[env_count] = v; env_count++; } while (0)
-	SET_ENV("WIPEOUT_VR_RESOLUTION_SCALE", "1.25");
-	SET_ENV("WIPEOUT_VR_SNAP_ANGLE", "1000");        // clamped
-	SET_ENV("WIPEOUT_VR_PROBE_SECONDS", "5");
-	SET_ENV("WIPEOUT_VR_FORCE_RENDER", "1");
-	SET_ENV("WIPEOUT_VR_TURN_MODE", "Smooth");
-	SET_ENV("WIPEOUT_VR_HUD_SCALE", "not a number"); // ignored
-	SET_ENV("WIPEOUT_VR_WORLD_SCALE", "");           // empty: ignored
+	SET_ENV("SM64_VR_RESOLUTION_SCALE", "1.25");
+	SET_ENV("SM64_VR_SNAP_ANGLE", "1000");        // clamped
+	SET_ENV("SM64_VR_PROBE_SECONDS", "5");
+	SET_ENV("SM64_VR_FORCE_RENDER", "1");
+	SET_ENV("SM64_VR_TURN_MODE", "Smooth");
+	SET_ENV("SM64_VR_HUD_SCALE", "not a number"); // ignored
+	SET_ENV("SM64_VR_WORLD_SCALE", "");           // empty: ignored
 	SET_ENV("OTHER_VR_REFRESH_RATE", "72");          // another prefix: ignored
 #undef SET_ENV
 
@@ -355,8 +356,8 @@ static void test_env_overrides(void) {
 	CHECK_NEAR(get(&s, "force_render"), 1, 1e-9);
 	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
 	CHECK_NEAR(get(&s, "hud_scale"), 100, 1e-9);
-	CHECK_NEAR(get(&s, "world_scale"), 128, 1e-9);
-	CHECK_NEAR(get(&s, "refresh_rate"), 90, 1e-9);
+	CHECK_NEAR(get(&s, "world_scale"), 104, 1e-9);
+	CHECK_NEAR(get(&s, "refresh_rate"), 120, 1e-9);
 
 	// the file's values are not touched, and so are not written back
 	CHECK_NEAR(file_value(&s, "resolution_scale"), 1.1, 1e-6);
@@ -369,6 +370,49 @@ static void test_env_overrides(void) {
 	free(text);
 
 	CHECK_INT(vr_settings_apply_env(&s, no_env), 0);
+	vr_settings_free(&s);
+}
+
+static void test_migration_to_schema_2(void) {
+	vr_settings_t s;
+	vr_settings_t back;
+	char *text;
+
+	// a schema-1 file at the old defaults moves to the new ones
+	parse(&s, "version = 1\n[vr]\nrefresh_rate = 90\nresolution_scale = 1.0\nsnap_angle = 45\n");
+	CHECK_NEAR(file_value(&s, "refresh_rate"), 120, 1e-9);
+	CHECK_NEAR(file_value(&s, "resolution_scale"), 1.25, 1e-9);
+	CHECK_NEAR(file_value(&s, "snap_angle"), 45, 1e-9);
+	text = format(&s);
+	CHECK(has(text, "version = 2\n"));
+	CHECK(has(text, "refresh_rate = 120\n"));
+	CHECK(has(text, "resolution_scale = 1.25\n"));
+	// written once, then left alone
+	CHECK_INT(parse(&back, text), 0);
+	CHECK_NEAR(file_value(&back, "refresh_rate"), 120, 1e-9);
+	free(text);
+	vr_settings_free(&s);
+	vr_settings_free(&back);
+
+	// values the user changed stay, whatever they are
+	parse(&s, "version = 1\n[vr]\nrefresh_rate = 72\nresolution_scale = 0.9\n");
+	CHECK_NEAR(file_value(&s, "refresh_rate"), 72, 1e-9);
+	CHECK_NEAR(file_value(&s, "resolution_scale"), 0.9, 1e-6);
+	vr_settings_free(&s);
+	parse(&s, "version = 1\n[vr]\nrefresh_rate = 144\nresolution_scale = 1.5\n");
+	CHECK_NEAR(file_value(&s, "refresh_rate"), 144, 1e-9);
+	CHECK_NEAR(file_value(&s, "resolution_scale"), 1.5, 1e-9);
+	vr_settings_free(&s);
+
+	// a schema-2 file that says 90 and 1.0 chose them
+	parse(&s, "version = 2\n[vr]\nrefresh_rate = 90\nresolution_scale = 1.0\n");
+	CHECK_NEAR(file_value(&s, "refresh_rate"), 90, 1e-9);
+	CHECK_NEAR(file_value(&s, "resolution_scale"), 1.0, 1e-9);
+	vr_settings_free(&s);
+
+	// a file with no version is treated as the old schema
+	parse(&s, "[vr]\nrefresh_rate = 90\n");
+	CHECK_NEAR(file_value(&s, "refresh_rate"), 120, 1e-9);
 	vr_settings_free(&s);
 }
 
@@ -400,10 +444,10 @@ static void test_load_and_save_files(void) {
 	CHECK(vr_settings_load(&s, path));
 	CHECK_NEAR(get(&s, "snap_angle"), 30, 1e-9);
 	char *text = read_all(path);
-	CHECK(has(text, "version = 1\n"));
+	CHECK(has(text, "version = 2\n"));
 	CHECK(has(text, "[vr]\n"));
 	CHECK(has(text, "snap_angle = 30\n"));
-	CHECK(has(text, "world_scale = 128.0\n"));
+	CHECK(has(text, "world_scale = 104.0\n"));
 	free(text);
 	CHECK(access(tmp, F_OK) != 0); // the temp file was renamed away
 	struct stat st;
@@ -412,14 +456,14 @@ static void test_load_and_save_files(void) {
 
 	// the user edits it: a bad value, an unknown key, one missing key
 	write_all(path,
-		"version = 1\n[vr]\nsnap_angle = 5\nmystery = \"keep me\"\n"
+		"version = 2\n[vr]\nsnap_angle = 5\nmystery = \"keep me\"\n"
 		"turn_mode = \"snap\"\n");
 	CHECK(vr_settings_load(&s, path));
 	CHECK_NEAR(get(&s, "snap_angle"), 15, 1e-9);
 	text = read_all(path);
 	CHECK(has(text, "snap_angle = 15\n"));
 	CHECK(has(text, "mystery = \"keep me\"\n"));
-	CHECK(has(text, "refresh_rate = 90\n"));
+	CHECK(has(text, "refresh_rate = 120\n"));
 	free(text);
 	vr_settings_free(&s);
 
@@ -458,7 +502,7 @@ static void test_load_and_save_files(void) {
 	// a missing directory: load still returns usable defaults, and says it could not write
 	snprintf(path, sizeof(path), "%s/no/such/dir/vr.toml", dir);
 	CHECK(!vr_settings_load(&s, path));
-	CHECK_NEAR(get(&s, "refresh_rate"), 90, 1e-9);
+	CHECK_NEAR(get(&s, "refresh_rate"), 120, 1e-9);
 	vr_settings_free(&s);
 
 	char cmd[600];
@@ -476,6 +520,7 @@ int main(void) {
 	RUN(test_version);
 	RUN(test_duplicates_and_odd_files);
 	RUN(test_env_overrides);
+	RUN(test_migration_to_schema_2);
 	RUN(test_set);
 	RUN(test_load_and_save_files);
 	return SFVR_TEST_RESULT("vr_settings");

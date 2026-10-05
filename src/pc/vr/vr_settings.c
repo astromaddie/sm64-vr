@@ -31,6 +31,9 @@ static const sfvr_setting_key port_keys[] = {
 	// Diagnostic: render the main menu's background level in stereo (with the
 	// menu on the HUD quad), for unattended eye dumps without input.
 	{ "diag_menu_stereo", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
+	// Diagnostic: count the refresh-rate fallback's 10 s windows without a wearer
+	// (unattended runs), so the fallback can be watched on the device.
+	{ "diag_rate_unworn", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
 	// Diagnostic: dump the Nth stereo frame rendered from tracked views (a worn
 	// headset), as dump_frame does for any frame. 0 = off.
 	{ "dump_worn_frame", SFVR_SETTING_INT, 0.0, 0.0, 1000000.0, NULL },
@@ -368,6 +371,24 @@ static void parse_line(void *user, const char *line, size_t len, int kind, const
 	}
 }
 
+// Schema 1 wrote the old display defaults (90 Hz, resolution_scale 1.0) into every file, so
+// a file at those values never chose them. Moving to schema 2 takes such a file to the
+// new defaults (120 Hz, 1.25: about 2160 px an eye, standard.md section 9). A value the
+// user changed stays. The version in the file is rewritten after this, so it runs once.
+static void migrate(vr_settings_t *s, const bool *seen) {
+	if (s->file_version >= 2) {
+		return;
+	}
+	int rate = vr_settings_index("refresh_rate");
+	int scale = vr_settings_index("resolution_scale");
+	if (rate >= 0 && seen[rate] && s->file_values[rate] == 90.0) {
+		s->file_values[rate] = vr_settings_key((size_t)rate)->def;
+	}
+	if (scale >= 0 && seen[scale] && fabs(s->file_values[scale] - 1.0) < 1e-9) {
+		s->file_values[scale] = vr_settings_key((size_t)scale)->def;
+	}
+}
+
 int vr_settings_parse(vr_settings_t *s, const char *text, size_t len) {
 	for (size_t i = 0; i < vr_settings_count(); i++) {
 		s->file_values[i] = vr_settings_key(i)->def;
@@ -387,6 +408,8 @@ int vr_settings_parse(vr_settings_t *s, const char *text, size_t len) {
 
 	parse_state_t p = { .s = s };
 	each_line(text, len, parse_line, &p);
+
+	migrate(s, p.seen);
 
 	for (size_t i = 0; i < vr_settings_count(); i++) {
 		if (!p.seen[i]) {

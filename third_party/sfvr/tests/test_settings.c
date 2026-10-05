@@ -13,7 +13,7 @@ static const char *const expected_keys[] = {
 
 static void test_schema(void)
 {
-	CHECK_INT(SFVR_SETTINGS_SCHEMA, 1);
+	CHECK_INT(SFVR_SETTINGS_SCHEMA, 2);
 }
 
 static void test_all_keys_present(void)
@@ -127,9 +127,9 @@ static void test_standard_defaults(void)
 	CHECK_STR(k->enum_values[0], "right");
 	CHECK_STR(k->enum_values[1], "left");
 	CHECK_INT(k->def, 0);
-	CHECK_NEAR(sfvr_settings_find("refresh_rate")->def, 90, 1e-9);
+	CHECK_NEAR(sfvr_settings_find("refresh_rate")->def, 120, 1e-9);
 	k = sfvr_settings_find("resolution_scale");
-	CHECK_NEAR(k->def, 1.0, 1e-9);
+	CHECK_NEAR(k->def, 1.25, 1e-9);
 	CHECK_NEAR(k->min, 0.75, 1e-9);
 	CHECK_NEAR(k->max, 1.5, 1e-9);
 }
