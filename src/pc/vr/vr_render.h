@@ -55,6 +55,7 @@ typedef struct {
     float eye_ms[2]; // CPU time of each eye's replay (submission, not GPU)
     float hud_ms;
     float panel_ms;
+    float gpu_ms; // GPU time of the eye and HUD passes of a frame a few frames back; < 0 when unknown
 } vr_render_timing_t;
 const vr_render_timing_t *vr_render_timing(void);
 

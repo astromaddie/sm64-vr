@@ -8,7 +8,7 @@ void vr_perf_init(vr_perf_t *p) {
 }
 
 bool vr_perf_frame(vr_perf_t *p, double now_s, int64_t display_time_ns, int64_t period_ns,
-	float tick_ms, float replay_ms, float hud_ms, const float eye_ms[2], char *line, size_t n
+	float tick_ms, float replay_ms, float hud_ms, const float eye_ms[2], float gpu_ms, char *line, size_t n
 ) {
 	int missed = 0;
 	if (p->has_last && period_ns > 0 && (display_time_ns - p->last_display_time) * 2 > period_ns * 3) {
@@ -18,6 +18,6 @@ bool vr_perf_frame(vr_perf_t *p, double now_s, int64_t display_time_ns, int64_t 
 	p->has_last = true;
 
 	float stages[3] = { tick_ms, replay_ms, hud_ms };
-	sfvr_perf_add_frame(&p->perf, now_s, missed, stages, eye_ms, -1.0f);
+	sfvr_perf_add_frame(&p->perf, now_s, missed, stages, eye_ms, gpu_ms);
 	return sfvr_perf_poll(&p->perf, now_s, line, n) != 0;
 }

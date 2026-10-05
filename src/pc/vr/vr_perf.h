@@ -12,7 +12,7 @@
 // one), of replaying the eyes or the panel ("replay") and of the HUD passes
 // ("hud"); eye= is the per-eye replay.
 // All are CPU submission times: a GL command takes the time to issue, not to
-// execute, and nothing here reads back from the GPU.
+// execute; gpu_ms (timestamp queries read a few frames late, < 0 when unknown) is the GPU's time.
 
 #define VR_PERF_WINDOW_S 10.0
 
@@ -28,6 +28,6 @@ void vr_perf_init(vr_perf_t *p);
 // display periods since the previous frame. Returns true and fills `line` when the
 // 10 s window has elapsed. now_s is a monotonic wall clock in seconds.
 bool vr_perf_frame(vr_perf_t *p, double now_s, int64_t display_time_ns, int64_t period_ns,
-	float tick_ms, float replay_ms, float hud_ms, const float eye_ms[2], char *line, size_t n);
+	float tick_ms, float replay_ms, float hud_ms, const float eye_ms[2], float gpu_ms, char *line, size_t n);
 
 #endif

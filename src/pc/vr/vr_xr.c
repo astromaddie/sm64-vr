@@ -451,23 +451,31 @@ int vr_xr_request_refresh_rate(vr_xr_t *xr, int wanted) {
 		vr_logf("the runtime offers no refresh rates");
 		return 0;
 	}
-	if (!check(xr, xr->api.request_display_refresh_rate(xr->session, (float)chosen), "xrRequestDisplayRefreshRateFB")) {
-		return 0;
-	}
-	xr->refresh_rate_chosen = chosen;
-	xr->refresh_rate_granted = 0; // until the runtime says it switched
-
 	char offered[16 * VR_MAX_REFRESH_RATES] = "";
 	for (uint32_t i = 0; i < count; i++) {
 		size_t used = strlen(offered);
 		snprintf(offered + used, sizeof(offered) - used, "%s%d", i ? "/" : "", (int)(xr->refresh_rates[i] + 0.5f));
 	}
-	float now = 0;
-	if (xr->api.get_display_refresh_rate && XR_SUCCEEDED(xr->api.get_display_refresh_rate(xr->session, &now))) {
-		vr_logf("refresh rate: asked for %d Hz, runtime offers %s Hz, requested %d Hz (running at %.0f Hz so far)", wanted, offered, chosen, now);
-	} else {
-		vr_logf("refresh rate: asked for %d Hz, runtime offers %s Hz, requested %d Hz", wanted, offered, chosen);
+	float before = 0;
+	bool have_before = xr->api.get_display_refresh_rate && XR_SUCCEEDED(xr->api.get_display_refresh_rate(xr->session, &before));
+	vr_logf("refresh rate: asked for %d Hz, runtime offers %s Hz, requesting %d Hz (running at %.0f Hz)",
+		wanted, offered, chosen, have_before ? before : 0.0f);
+
+	if (have_before && (int)(before + 0.5f) == chosen) {
+		// Already there (SteamVR offers an app its per-app rate, so this is the usual case when that rate
+		// is the wanted one or the only one); SteamVR answers a request for the current rate with an error
+		xr->refresh_rate_chosen = chosen;
+		xr->refresh_rate_granted = chosen;
+		return chosen;
 	}
+	if (!check(xr, xr->api.request_display_refresh_rate(xr->session, (float)chosen), "xrRequestDisplayRefreshRateFB")) {
+		// The display stays where it is (SteamVR offers an app only its per-app rate): watch that one
+		xr->refresh_rate_chosen = 0;
+		xr->refresh_rate_granted = have_before ? (int)(before + 0.5f) : 0;
+		return 0;
+	}
+	xr->refresh_rate_chosen = chosen;
+	xr->refresh_rate_granted = 0; // until the runtime says it switched
 	return chosen;
 }
 

@@ -358,7 +358,7 @@ void vr_frame_end(void) {
         double now_s = (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
         float replay_ms = t->eye_ms[0] + t->eye_ms[1] + t->panel_ms;
         if (vr_perf_frame(&vr.perf, now_s, vr.xr.frame.predicted_display_time, vr.xr.frame.predicted_display_period,
-                (float)vr.tick_ms, replay_ms, t->hud_ms, t->eye_ms, line, sizeof(line))) {
+                (float)vr.tick_ms, replay_ms, t->hud_ms, t->eye_ms, t->gpu_ms, line, sizeof(line))) {
             const vr_render_info_t *info = vr_render_info();
             printf("%s ticks=%llu mode=%s tris=%u/%u hud_tris=%u\n", line, (unsigned long long)vr.ticks_total,
                 info->mode == VR_MODE_STEREO ? "stereo" : "mono", info->tris_eye[0], info->tris_eye[1], info->tris_hud);
@@ -376,11 +376,15 @@ static void rate_update(void) {
     if (target != vr.rate.target_hz) {
         vr_rate_set_target(&vr.rate, target);
     }
-    bool counting = vr.xr.session_running && vr.xr.frame.should_render && (vr.xr.focused || setting("diag_rate_unworn") != 0);
+    bool worn = vr.xr.frame.should_render && vr.xr.focused;
+    bool unworn_diag = setting("diag_rate_unworn") != 0 && (vr.xr.frame.should_render || vr.xr.config.force_render);
+    bool counting = vr.xr.session_running && (worn || unworn_diag);
     double now_s = (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
     switch (vr_rate_frame(&vr.rate, now_s, counting)) {
         case VR_RATE_WINDOW_OK:
-            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz", vr.rate.last_fps, VR_RATE_WINDOW_S, vr.rate.target_hz);
+            vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz (frame period %.2f ms = %.1f Hz)", vr.rate.last_fps,
+                VR_RATE_WINDOW_S, vr.rate.target_hz, (double)vr.xr.frame.predicted_display_period * 1e-6,
+                vr.xr.frame.predicted_display_period > 0 ? 1e9 / (double)vr.xr.frame.predicted_display_period : 0.0);
             break;
         case VR_RATE_WINDOW_LOW:
             vr_logf("refresh rate: %.1f fps over %.0f s at %d Hz is below %.0f%%", vr.rate.last_fps, VR_RATE_WINDOW_S,

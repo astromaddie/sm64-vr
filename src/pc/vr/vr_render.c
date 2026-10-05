@@ -26,6 +26,7 @@
 #define VR_FALLBACK_NEAR 5.0f
 #define VR_FALLBACK_FAR 20000.0f
 
+#define VR_GPU_RING 6
 #define VR_CHECKED_MAX 32
 #define VR_DUMP_SLOTS 4
 
@@ -82,12 +83,56 @@ static struct {
 
     vr_render_timing_t timing;
     vr_render_info_t info;
+
+    // GPU time of the eye and HUD passes (timing on): timestamp pairs in a ring,
+    // read back a few frames later so nothing waits (lesson 10, lesson 53)
+    GLuint gpu_query[VR_GPU_RING][2];
+    bool gpu_pending[VR_GPU_RING];
+    int gpu_slot;
+    float gpu_last_ms; // the newest finished result; -1 before the first
 } vrr;
 
 static double now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec * 1e-6;
+}
+
+// Writes the start timestamp of this frame's passes, and picks up the oldest finished pair
+static void gpu_begin(void) {
+    if (!vrr.st.timing) {
+        return;
+    }
+    if (!vrr.gpu_query[0][0]) {
+        for (int i = 0; i < VR_GPU_RING; i++) {
+            glGenQueries(2, vrr.gpu_query[i]);
+        }
+        vrr.gpu_last_ms = -1.0f;
+    }
+    // The slot about to be reused: its pair is VR_GPU_RING frames old
+    int slot = vrr.gpu_slot;
+    if (vrr.gpu_pending[slot]) {
+        GLint ready = 0;
+        glGetQueryObjectiv(vrr.gpu_query[slot][1], GL_QUERY_RESULT_AVAILABLE, &ready);
+        if (ready) {
+            GLuint64 a = 0, b = 0;
+            glGetQueryObjectui64v(vrr.gpu_query[slot][0], GL_QUERY_RESULT, &a);
+            glGetQueryObjectui64v(vrr.gpu_query[slot][1], GL_QUERY_RESULT, &b);
+            vrr.gpu_last_ms = (float)((double)(b - a) * 1e-6);
+        }
+        vrr.gpu_pending[slot] = false;
+    }
+    glQueryCounter(vrr.gpu_query[slot][0], GL_TIMESTAMP);
+    vrr.timing.gpu_ms = vrr.gpu_last_ms;
+}
+
+static void gpu_end(void) {
+    if (!vrr.st.timing || !vrr.gpu_query[0][0]) {
+        return;
+    }
+    glQueryCounter(vrr.gpu_query[vrr.gpu_slot][1], GL_TIMESTAMP);
+    vrr.gpu_pending[vrr.gpu_slot] = true;
+    vrr.gpu_slot = (vrr.gpu_slot + 1) % VR_GPU_RING;
 }
 
 const vr_render_timing_t *vr_render_timing(void) {
@@ -629,6 +674,7 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         vr_stage_request_recentre(&vrr.stage);
     }
     memset(&vrr.timing, 0, sizeof(vrr.timing));
+    vrr.timing.gpu_ms = -1.0f;
 
     const char *reason = mono_reason();
     if (reason == NULL && !vr_game_cam_from_view(gVrInterpCamView, &vrr.cam)) {
@@ -688,9 +734,11 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         vr_hud_size(vrr.st.hud_distance, vrr.st.hud_scale, (float)vrr.st.ui_width / (float)vrr.st.ui_height,
             &vrr.hud_width, &vrr.hud_height);
 
+        gpu_begin();
         if (replay_eyes(dl, layers)) {
             replay_hud(dl, layers);
         }
+        gpu_end();
 
         // What the eyes were rendered with, every 10 s at 72 Hz: tracked poses
         // and fovs, and the eye positions in the game (the IPD in game units)

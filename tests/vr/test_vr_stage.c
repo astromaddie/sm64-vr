@@ -214,7 +214,7 @@ static void test_perf_line(void) {
 		double now = i * (1.0 / 90.0);
 		// frame 300 takes two periods: one missed
 		display += (i == 300) ? 2 * period : period;
-		if (vr_perf_frame(&p, now, display, period, 1.0f, 4.4f, 0.5f, eyes, line, sizeof(line))) {
+		if (vr_perf_frame(&p, now, display, period, 1.0f, 4.4f, 0.5f, eyes, -1.0f, line, sizeof(line))) {
 			emitted++;
 			CHECK(strncmp(line, "[vr-perf] fps=", 14) == 0);
 			CHECK(strstr(line, "missed=1") != NULL);

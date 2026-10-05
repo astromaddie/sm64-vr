@@ -74,6 +74,7 @@ static struct {
 	XrEnvironmentBlendMode last_blend;
 	int request_refresh_calls;
 	float requested_refresh;
+	float current_refresh; // what xrGetDisplayRefreshRateFB reports; 0 = the function is missing
 	int enumerate_refresh_calls;
 	int swapchain_creates;
 	XrSwapchainCreateInfo swapchain_info[MAX_SWAPCHAINS];
@@ -253,6 +254,12 @@ static XrResult XRAPI_CALL fake_request_refresh_rate(XrSession session, float ra
 	return XR_SUCCESS;
 }
 
+static XrResult XRAPI_CALL fake_get_refresh_rate(XrSession session, float *rate) {
+	(void)session;
+	*rate = fake.current_refresh;
+	return XR_SUCCESS;
+}
+
 static XrResult XRAPI_CALL fake_get_instance_proc_addr(XrInstance instance, const char *name, PFN_xrVoidFunction *fn) {
 	(void)instance;
 	*fn = NULL;
@@ -264,6 +271,9 @@ static XrResult XRAPI_CALL fake_get_instance_proc_addr(XrInstance instance, cons
 	}
 	else if (!fake.refresh_fns_missing && strcmp(name, "xrRequestDisplayRefreshRateFB") == 0) {
 		*fn = (PFN_xrVoidFunction)fake_request_refresh_rate;
+	}
+	else if (fake.current_refresh > 0 && strcmp(name, "xrGetDisplayRefreshRateFB") == 0) {
+		*fn = (PFN_xrVoidFunction)fake_get_refresh_rate;
 	}
 	return *fn ? XR_SUCCESS : XR_ERROR_FUNCTION_UNSUPPORTED;
 }
@@ -1172,6 +1182,19 @@ static void test_refresh_rate_fallback(void) {
 	vr_xr_poll_events(&xr);
 	CHECK_NEAR(fake.requested_refresh, 90, 1e-6);
 	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 72);
+	vr_xr_destroy(&xr);
+
+	// SteamVR offers only the app's per-app rate and is running at it: no request (it would be an error)
+	fake_reset();
+	fake.refresh_rate_count = 1;
+	fake.refresh_rates[0] = 90;
+	fake.current_refresh = 90;
+	CHECK(make_host(&xr, 1.25f, 120, false));
+	push_state(XR_SESSION_STATE_READY);
+	vr_xr_poll_events(&xr);
+	CHECK_INT(fake.request_refresh_calls, 0);
+	CHECK_INT(vr_xr_target_refresh_rate(&xr), 90);
+	CHECK_INT(vr_xr_fall_back_refresh_rate(&xr), 0);
 	vr_xr_destroy(&xr);
 
 	// no extension: nothing to fall back to
