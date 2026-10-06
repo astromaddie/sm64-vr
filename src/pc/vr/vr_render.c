@@ -34,7 +34,7 @@ typedef struct {
     GLuint pbo;
     GLsync fence;
     bool pending;
-    char path[600];
+    char path[640]; // dump directory plus the image filename
     uint32_t width, height;
     int comp;
 } vr_dump_slot_t;
@@ -44,6 +44,10 @@ typedef struct {
     vr_game_cam_t cam;
     vr_eye_cam_t eye;
     float fov[4];
+    float sky_proj[16];
+    bool cinema;
+    int eye_index;
+    float ipd, screen_width;
 } vr_eye_ctx_t;
 
 static struct {
@@ -52,6 +56,11 @@ static struct {
     vr_provider_t provider;
     char dump_dir[600];
     vr_stage_t stage;
+    vr_cinema_latch_t cinema_latch;
+    vr_cinema_screen_t cinema_screen;
+    vr_view_t cinema_views[2];
+    bool diag_cinema_started, diag_cinema_active;
+    int64_t diag_cinema_start_ns;
 
     // GL
     bool gl_ready;
@@ -168,13 +177,14 @@ static const char *const RESOLVE_FS =
     "in vec2 v_uv;\n"
     "uniform sampler2D over_black;\n"
     "uniform sampler2D over_white;\n"
+    "uniform bool cinema_band;\n"
     "out vec4 frag_color;\n"
     "void main(void) {\n"
     "    vec3 k = texture(over_black, v_uv).rgb;\n"
     "    vec3 w = texture(over_white, v_uv).rgb;\n"
     "    float a = clamp(1.0 - dot(w - k, vec3(1.0 / 3.0)), 0.0, 1.0);\n"
     "    vec3 c = a > 0.002 ? clamp(k / a, 0.0, 1.0) : vec3(0.0);\n"
-    "    frag_color = vec4(c, a);\n"
+    "    frag_color = cinema_band ? vec4(k, 1.0) : vec4(c, a);\n"
     "}\n";
 
 static GLuint compile(GLenum type, const char *src) {
@@ -388,8 +398,19 @@ static void dump_state_log(const vr_layers_t *layers) {
     const vr_render_settings_t *st = &vrr.st;
     fprintf(f, "frame %u (dump_frame %d, dump_worn_frame %d, tracked stereo frames %u)\n", vrr.frames, st->dump_frame,
         st->dump_worn_frame, vrr.worn_stereo_frames);
-    fprintf(f, "mode %s%s%s\n", vrr.stage.mode == VR_MODE_STEREO ? "stereo" : "mono",
-        vrr.stage.mode == VR_MODE_STEREO ? "" : " reason=", vrr.stage.mode == VR_MODE_STEREO ? "" : vrr.info.mono_reason);
+    fprintf(f, "mode %s%s%s projection=%d hold=%d\n", vr_mode_name(vrr.stage.mode),
+        vrr.stage.mode == VR_MODE_MONO ? " reason=" : "", vrr.stage.mode == VR_MODE_MONO ? vrr.info.mono_reason : "",
+        layers->projection, vrr.holding);
+    fprintf(f, "cinema active=%d pending=%d pending_valid=%d cutscene=%u reason=%s camera_mode=%u timer=%d shot=%d cutscenes=%d diag=%d distance=%.3f width=%.3f\n",
+        vrr.cinema_latch.active, vrr.cinema_latch.pending, vrr.cinema_latch.pending_valid, gVrTick.cutscene,
+        vr_cinema_cutscene_reason(gVrTick.cutscene), gVrTick.camera_mode, gVrTick.cutscene_timer, gVrTick.cutscene_shot,
+        st->cutscenes, vrr.diag_cinema_active, st->cinema_distance, st->cinema_width);
+    if (vrr.stage.mode == VR_MODE_CINEMA) {
+        const vr_cinema_screen_t *s = &vrr.cinema_screen;
+        fprintf(f, "cinema screen pos=%.4f,%.4f,%.4f quat=%.5f,%.5f,%.5f,%.5f size=%.4fx%.4f m\n",
+            s->pose.position[0], s->pose.position[1], s->pose.position[2], s->pose.orientation[0],
+            s->pose.orientation[1], s->pose.orientation[2], s->pose.orientation[3], s->width, s->height);
+    }
     fprintf(f, "predicted_display_time_ns %lld\n", (long long)vrr.now_ns);
     fprintf(f, "settings world_scale=%.3f head_translation=%.3f level_pitch=%d hud_distance=%.3f hud_scale=%.1f force_mono=%d diag_menu_stereo=%d diag_yaw_deg=%.2f\n",
         st->rig.world_scale, st->rig.head_translation, st->rig.level_pitch, st->hud_distance, st->hud_scale,
@@ -409,8 +430,13 @@ static void dump_state_log(const vr_layers_t *layers) {
             v->pose.position[0], v->pose.position[1], v->pose.position[2],
             v->pose.orientation[0], v->pose.orientation[1], v->pose.orientation[2], v->pose.orientation[3],
             v->fov[0], v->fov[1], v->fov[2], v->fov[3]);
+        const vr_view_t *submitted = &layers->views[e];
+        fprintf(f, "eye%d submitted pos=%.4f,%.4f,%.4f quat=%.5f,%.5f,%.5f,%.5f fov=%.4f,%.4f,%.4f,%.4f\n", e,
+            submitted->pose.position[0], submitted->pose.position[1], submitted->pose.position[2],
+            submitted->pose.orientation[0], submitted->pose.orientation[1], submitted->pose.orientation[2], submitted->pose.orientation[3],
+            submitted->fov[0], submitted->fov[1], submitted->fov[2], submitted->fov[3]);
     }
-    if (vrr.stage.mode == VR_MODE_STEREO) {
+    if (vrr.stage.mode == VR_MODE_STEREO || vrr.stage.mode == VR_MODE_CINEMA) {
         fprintf(f, "game camera pos=%.2f,%.2f,%.2f back=%.4f,%.4f,%.4f\n",
             vrr.cam.position[0], vrr.cam.position[1], vrr.cam.position[2], vrr.cam.back[0], vrr.cam.back[1], vrr.cam.back[2]);
         for (int e = 0; e < 2; e++) {
@@ -445,7 +471,19 @@ static void dump_state_log(const vr_layers_t *layers) {
 // Passes
 
 static void world_proj(const float game_proj[16], float out[16], void *user) {
-    const vr_eye_ctx_t *c = user;
+    vr_eye_ctx_t *c = user;
+    if (c->cinema) {
+        if (!vr_cinema_game_eye(&c->cam, game_proj, c->ipd, c->screen_width,
+                c->eye_index, &c->eye, c->fov, out)) {
+            // An unsupported projection is safely flat on the cinema screen.
+            memcpy(out, game_proj, 16 * sizeof(float));
+        } else {
+            // The game's projection is interpolated, including cinematic FOV
+            // changes. Update the sky before its marker is replayed too.
+            vr_eye_sky_proj(&c->eye, c->fov, VR_SKY_NEAR, VR_SKY_FAR, c->sky_proj);
+        }
+        return;
+    }
     float n, f;
     if (!vr_game_proj_near_far(game_proj, &n, &f)) {
         n = VR_FALLBACK_NEAR;
@@ -475,6 +513,10 @@ static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
         pass.world_proj = world_proj;
         pass.user = &vrr.eye_ctx[e];
         vr_eye_sky_proj(&vrr.eye_ctx[e].eye, vrr.eye_ctx[e].fov, VR_SKY_NEAR, VR_SKY_FAR, pass.sky_proj);
+        if (vrr.eye_ctx[e].cinema) {
+            memcpy(vrr.eye_ctx[e].sky_proj, pass.sky_proj, sizeof(pass.sky_proj));
+            pass.sky_proj_live = vrr.eye_ctx[e].sky_proj;
+        }
         gfx_vr_run_pass(dl, &pass);
         vrr.info.tris_eye[e] = gfx_vr_pass_stats()->tris_drawn;
         vrr.info.world_proj_loads[e] = gfx_vr_pass_stats()->world_proj_loads;
@@ -485,6 +527,31 @@ static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         vrr.provider.release(vrr.provider.user, (vr_surface_t)(VR_SURFACE_EYE0 + e));
         vrr.timing.eye_ms[e] = (float)(now_ms() - t0);
+    }
+    layers->projection = ok;
+    if (ok) {
+        memcpy(layers->views, vrr.stage.mode == VR_MODE_CINEMA ? vrr.cinema_views : vrr.views, sizeof(layers->views));
+    }
+    return ok;
+}
+
+// Mono screens and closed warps still own the environment. Without a black
+// projection beneath their quads SteamVR supplies its default white room.
+static bool replay_black_eyes(vr_layers_t *layers) {
+    bool ok = true;
+    static const float black[4] = { 0, 0, 0, 1 };
+    for (int e = 0; e < 2; e++) {
+        vr_target_t t;
+        if (!vrr.provider.acquire(vrr.provider.user, (vr_surface_t)(VR_SURFACE_EYE0 + e), &t)) {
+            ok = false;
+            continue;
+        }
+        bind_target(t.image, t.width, t.height, 0, black);
+        if (vrr.dump_this_frame) {
+            dump_queue(e, e == 0 ? "vr-eye0.png" : "vr-eye1.png", t.image, t.width, t.height, 3);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        vrr.provider.release(vrr.provider.user, (vr_surface_t)(VR_SURFACE_EYE0 + e));
     }
     layers->projection = ok;
     if (ok) {
@@ -526,6 +593,7 @@ static void replay_hud(Gfx *dl, vr_layers_t *layers) {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glUseProgram(vrr.resolve_program);
+    glUniform1i(glGetUniformLocation(vrr.resolve_program, "cinema_band"), vrr.stage.mode == VR_MODE_CINEMA);
     glBindVertexArray(vrr.resolve_vao);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, vrr.hud_tex[0]);
@@ -544,7 +612,8 @@ static void replay_hud(Gfx *dl, vr_layers_t *layers) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     vrr.provider.release(vrr.provider.user, VR_SURFACE_HUD);
 
-    layers->hud = vrr.st.hud_visible;
+    // Cutscene text remains available even if gameplay counters are hidden.
+    layers->hud = vrr.st.hud_visible || vrr.stage.mode == VR_MODE_CINEMA;
     layers->hud_pose = vrr.hud_pose;
     layers->hud_width = vrr.hud_width;
     layers->hud_height = vrr.hud_height;
@@ -597,7 +666,7 @@ static const char *mono_reason(void) {
     if (!gVrTick.gameplay_camera && !gVrTick.star_select) {
         return "not a gameplay camera (menu, intro)";
     }
-    if (gVrTick.in_main_menu && !vrr.st.diag_menu_stereo) {
+    if (gVrTick.in_main_menu && !vrr.st.diag_menu_stereo && !vrr.diag_cinema_active) {
         return "main menu";
     }
     if (!gVrInterpCamValid) {
@@ -659,6 +728,13 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
             vr_views_apply_yaw(vrr.views, vrr.st.diag_yaw);
         }
         vr_head_pose(vrr.views, &vrr.head);
+    } else if (vrr.last_synthetic < 0) {
+        // Black needs valid layer poses/FOVs even before the first locate.
+        for (int e = 0; e < 2; e++) {
+            vrr.views[e].pose.orientation[3] = 1.0f;
+            vrr.views[e].fov[0] = vrr.views[e].fov[3] = -0.78539816f;
+            vrr.views[e].fov[1] = vrr.views[e].fov[2] = 0.78539816f;
+        }
     }
     vrr.frames++;
     vrr.dump_this_frame = vrr.st.dump_frame > 0 && vrr.frames == (uint32_t)vrr.st.dump_frame && vrr.dump_dir[0];
@@ -675,26 +751,51 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
     }
     memset(&vrr.timing, 0, sizeof(vrr.timing));
     vrr.timing.gpu_ms = -1.0f;
+    vrr.info.tris_eye[0] = vrr.info.tris_eye[1] = vrr.info.tris_hud = 0;
+    vrr.info.world_proj_loads[0] = vrr.info.world_proj_loads[1] = 0;
+
+    // Force a real world camera onto the cinema without input, including the
+    // main-menu background. The diagnostic clock begins at that first scene.
+    bool diag_scene = vrr.views_ok && gVrTick.rendered_area && gVrInterpCamValid
+        && gVrTick.gameplay_camera && !gVrTick.star_select && !vrr.st.force_mono;
+    if (!vrr.diag_cinema_started && diag_scene && vrr.st.diag_cinema_seconds > 0.0f) {
+        vrr.diag_cinema_started = true;
+        vrr.diag_cinema_start_ns = vrr.now_ns;
+        vr_logf("cinema: diagnostic armed for %.2f s", vrr.st.diag_cinema_seconds);
+    }
+    vrr.diag_cinema_active = vrr.diag_cinema_started
+        && (double)(vrr.now_ns - vrr.diag_cinema_start_ns) * 1e-9 < vrr.st.diag_cinema_seconds;
 
     const char *reason = mono_reason();
     if (reason == NULL && !vr_game_cam_from_view(gVrInterpCamView, &vrr.cam)) {
         reason = "degenerate camera";
     }
-    bool stereo = reason == NULL;
+    bool world = reason == NULL;
     // Behind a closed warp transition the game draws no area: in stereo that
     // is a held full fade in the transition's colour, not a switch to the panel
-    bool hold = !stereo && vrr.views_ok && gVrTick.transition_hold && !gVrTick.in_main_menu
-        && vrr.stage.mode == VR_MODE_STEREO;
+    bool hold = !world && vrr.views_ok && gVrTick.transition_hold && !gVrTick.in_main_menu
+        && (vrr.stage.mode == VR_MODE_STEREO || vrr.stage.mode == VR_MODE_CINEMA);
     if (hold != vrr.holding) {
         vrr.holding = hold;
         vr_logf("render: %s", hold ? "holding behind a closed transition" : "transition hold released");
     }
-    if (!hold && vr_stage_set_mode(&vrr.stage, stereo ? VR_MODE_STEREO : VR_MODE_MONO, vrr.now_ns)) {
-        vr_logf("render: %s%s%s", stereo ? "stereo" : "mono", stereo ? "" : ": ", stereo ? "" : reason);
+    bool want_cinema = (vrr.diag_cinema_active && diag_scene) || (vrr.st.cutscenes == 0 && gVrTick.gameplay_camera
+        && !gVrTick.in_main_menu && vr_cinema_cutscene(gVrTick.cutscene));
+    bool cinema = vr_cinema_latch(&vrr.cinema_latch, want_cinema && world, hold, vrr.now_ns) && world;
+    // A real menu leaves cinema immediately. Hysteresis applies to scripted
+    // camera gaps in the live world, never to the file selector or diorama.
+    if (!hold && (!world || (gVrTick.in_main_menu && !vrr.diag_cinema_active) || gVrTick.star_select)) {
+        memset(&vrr.cinema_latch, 0, sizeof(vrr.cinema_latch));
+        cinema = false;
     }
-    vrr.info.mono_reason = stereo || hold ? "" : reason;
+    vr_mode_t mode = world ? (cinema ? VR_MODE_CINEMA : VR_MODE_STEREO) : VR_MODE_MONO;
+    if (!hold && vr_stage_set_mode(&vrr.stage, mode, vrr.now_ns)) {
+        vr_logf("render: %s%s%s cutscene=%u camera_mode=%u", vr_mode_name(mode), world ? "" : ": ", world ? "" : reason,
+            gVrTick.cutscene, gVrTick.camera_mode);
+    }
+    vrr.info.mono_reason = world || hold ? "" : reason;
 
-    if (stereo && !frame->synthetic) {
+    if (world && !frame->synthetic) {
         vrr.worn_stereo_frames++;
         if (vrr.st.dump_worn_frame > 0 && vrr.worn_stereo_frames == (uint32_t)vrr.st.dump_worn_frame && vrr.dump_dir[0]) {
             vrr.dump_this_frame = true;
@@ -706,7 +807,40 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
 
     if (hold) {
         gVrBillboardHead = false;
-    } else if (stereo) {
+        replay_black_eyes(layers);
+    } else if (cinema) {
+        gVrBillboardHead = false; // sprites use the scripted game camera
+        vr_stage_cinema_screen(&vrr.stage, vrr.views, vrr.st.cinema_distance, vrr.st.cinema_width, &vrr.cinema_screen);
+        if (vr_cinema_views(&vrr.cinema_screen, vrr.views, vrr.cinema_views)) {
+            float d[3];
+            for (int i = 0; i < 3; i++) {
+                d[i] = vrr.views[1].pose.position[i] - vrr.views[0].pose.position[i];
+            }
+            float ipd = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            float fov = gVrTick.camera_fov > 1.0f && gVrTick.camera_fov < 179.0f ? gVrTick.camera_fov : 45.0f;
+            float tan_y = tanf(fov * (float)M_PI / 360.0f);
+            float game_proj[16];
+            vr_projection_tan(-tan_y * 16.0f / 9.0f, tan_y * 16.0f / 9.0f, tan_y, -tan_y,
+                100.0f, VR_FALLBACK_FAR, game_proj);
+            for (int e = 0; e < 2; e++) {
+                vr_eye_ctx_t *c = &vrr.eye_ctx[e];
+                c->cam = vrr.cam;
+                c->cinema = true;
+                c->eye_index = e;
+                c->ipd = ipd;
+                c->screen_width = vrr.cinema_screen.width;
+                vr_cinema_game_eye(&c->cam, game_proj, ipd, c->screen_width, e, &c->eye, c->fov, NULL);
+            }
+            vr_cinema_band(&vrr.cinema_screen, &vrr.hud_pose, &vrr.hud_width, &vrr.hud_height);
+            gpu_begin();
+            if (replay_eyes(dl, layers)) {
+                replay_hud(dl, layers);
+            }
+            gpu_end();
+        } else {
+            replay_black_eyes(layers);
+        }
+    } else if (world) {
         vr_stage_apply_recentre(&vrr.stage, raw_views);
 
         vr_anchor_t anchor;
@@ -721,6 +855,7 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         for (int e = 0; e < 2; e++) {
             vr_eye_ctx_t *c = &vrr.eye_ctx[e];
             c->cam = vrr.cam;
+            c->cinema = false;
             vr_eye_from_pose(&anchor, &rig, &vrr.stage.recentre, &vrr.head, &vrr.views[e].pose, &c->eye);
             memcpy(c->fov, vrr.views[e].fov, sizeof(c->fov));
         }
@@ -762,7 +897,9 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         }
     } else {
         gVrBillboardHead = false;
-        replay_mono(dl, layers);
+        if (replay_black_eyes(layers)) {
+            replay_mono(dl, layers);
+        }
     }
 
     gl_restore();
@@ -770,7 +907,10 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
 
     // The stage's mode-switch fade is black; a warp transition fades in its own colour
     float stage_alpha = vr_stage_fade_alpha(&vrr.stage, vrr.now_ns);
-    float trans_alpha = (stereo || hold) ? gVrTick.transition_alpha : 0.0f;
+    if (world && want_cinema && !cinema) {
+        stage_alpha = 1.0f; // cover the cinema latch's 50 ms entry qualification
+    }
+    float trans_alpha = (world || hold) ? gVrTick.transition_alpha : 0.0f;
     layers->fade_alpha = stage_alpha > trans_alpha ? stage_alpha : trans_alpha;
     for (int i = 0; i < 3; i++) {
         layers->fade_rgb[i] = trans_alpha > stage_alpha ? gVrTick.transition_rgb[i] / 255.0f : 0.0f;

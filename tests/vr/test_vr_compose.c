@@ -101,13 +101,16 @@ static void test_mono_layer(void) {
 	setup();
 	vr_layers_t l;
 	memset(&l, 0, sizeof(l));
+	l.projection = true; // the renderer clears both eyes to black beneath the panel
+	memcpy(l.views, xr.frame.views, sizeof(l.views));
 	l.panel = true;
 	l.panel_pose.orientation[3] = 1;
 	l.panel_pose.position[2] = -2.0f;
 	l.panel_width = 2.4f;
 	vr_compose_t c;
-	CHECK_INT(vr_compose_layers(&c, &xr, &l, &hud, &panel, NULL), 1);
-	const XrCompositionLayerQuad *q = (const XrCompositionLayerQuad *)c.list[0];
+	CHECK_INT(vr_compose_layers(&c, &xr, &l, &hud, &panel, NULL), 2);
+	CHECK_INT(c.list[0]->type, XR_TYPE_COMPOSITION_LAYER_PROJECTION);
+	const XrCompositionLayerQuad *q = (const XrCompositionLayerQuad *)c.list[1];
 	CHECK(q->space == xr.local_space);
 	CHECK(q->subImage.swapchain == panel.handle);
 	CHECK_INT(q->layerFlags, 0); // opaque
@@ -137,11 +140,13 @@ static void test_fade_goes_on_top_in_view_space(void) {
 	// the fade covers a mono panel too
 	vr_layers_t m;
 	memset(&m, 0, sizeof(m));
+	m.projection = true;
+	memcpy(m.views, xr.frame.views, sizeof(m.views));
 	m.panel = true;
 	m.panel_width = 2.4f;
 	m.fade_alpha = 1.0f;
-	CHECK_INT(vr_compose_layers(&c, &xr, &m, &hud, &panel, &fade), 2);
-	CHECK(((const XrCompositionLayerQuad *)c.list[1])->subImage.swapchain == fade.handle);
+	CHECK_INT(vr_compose_layers(&c, &xr, &m, &hud, &panel, &fade), 3);
+	CHECK(((const XrCompositionLayerQuad *)c.list[2])->subImage.swapchain == fade.handle);
 }
 
 static void test_nothing_to_submit(void) {
@@ -151,6 +156,9 @@ static void test_nothing_to_submit(void) {
 	memset(&l, 0, sizeof(l)); // standby: the renderer submits an empty frame
 	CHECK_INT(vr_compose_layers(&c, &xr, &l, &hud, &panel, &fade), 0);
 	CHECK_INT(vr_compose_layers(&c, &xr, NULL, &hud, &panel, &fade), 0);
+	l.panel = true; // failed black-eye acquisition must never produce quad-only frames
+	l.fade_alpha = 1;
+	CHECK_INT(vr_compose_layers(&c, &xr, &l, &hud, &panel, &fade), 0);
 
 	// a HUD with no swapchain behind it is dropped, not submitted empty
 	l = stereo_layers();

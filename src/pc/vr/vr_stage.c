@@ -16,12 +16,25 @@ void vr_render_settings_from(vr_render_settings_t *out, const vr_settings_t *s) 
 	out->hud_visible = vr_settings_get(s, "hud_visible") != 0;
 	out->panel_distance = (float)vr_settings_get(s, "panel_distance");
 	out->panel_width = (float)vr_settings_get(s, "panel_width");
+	out->cutscenes = (int)vr_settings_get(s, "cutscenes");
+	out->cinema_distance = (float)vr_settings_get(s, "cinema_distance");
+	out->cinema_width = (float)vr_settings_get(s, "cinema_width");
+	out->diag_cinema_seconds = (float)vr_settings_get(s, "diag_cinema_seconds");
 	out->diag_yaw = (float)(vr_settings_get(s, "diag_yaw") * 3.14159265358979323846 / 180.0);
 	out->dump_frame = (int)vr_settings_get(s, "dump_frame");
 	out->dump_worn_frame = (int)vr_settings_get(s, "dump_worn_frame");
 	out->timing = vr_settings_get(s, "timing") != 0;
 	out->ui_width = VR_UI_WIDTH;
 	out->ui_height = VR_UI_HEIGHT;
+}
+
+const char *vr_mode_name(vr_mode_t mode) {
+	switch (mode) {
+		case VR_MODE_STEREO: return "stereo";
+		case VR_MODE_CINEMA: return "cinema";
+		case VR_MODE_MONO: return "mono";
+		default: return "none";
+	}
 }
 
 float vr_fade_alpha(float seconds) {
@@ -43,6 +56,19 @@ void vr_stage_init(vr_stage_t *s) {
 void vr_stage_request_recentre(vr_stage_t *s) {
 	s->recentre_pending = true;
 	s->panel_pending = true;
+	s->cinema_pending = true;
+}
+
+void vr_stage_cinema_screen(vr_stage_t *s, const vr_view_t views[2], float distance, float width,
+	vr_cinema_screen_t *out) {
+	if (s->cinema_pending || !s->cinema_valid) {
+		vr_pose_t head;
+		vr_head_pose(views, &head);
+		vr_cinema_place(&head, distance, width, &s->cinema_screen);
+		s->cinema_valid = true;
+		s->cinema_pending = false;
+	}
+	*out = s->cinema_screen;
 }
 
 bool vr_stage_set_mode(vr_stage_t *s, vr_mode_t mode, int64_t now_ns) {

@@ -361,7 +361,7 @@ void vr_frame_end(void) {
                 (float)vr.tick_ms, replay_ms, t->hud_ms, t->eye_ms, t->gpu_ms, line, sizeof(line))) {
             const vr_render_info_t *info = vr_render_info();
             printf("%s ticks=%llu mode=%s tris=%u/%u hud_tris=%u\n", line, (unsigned long long)vr.ticks_total,
-                info->mode == VR_MODE_STEREO ? "stereo" : "mono", info->tris_eye[0], info->tris_eye[1], info->tris_hud);
+                vr_mode_name(info->mode), info->tris_eye[0], info->tris_eye[1], info->tris_hud);
             fflush(stdout);
         }
     }

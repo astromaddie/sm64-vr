@@ -8,7 +8,8 @@
 // composition layers for vr_xr_frame_end(). No runtime calls and no GL: it only
 // fills structs, so tests check the result.
 //
-// Order, bottom to top: the projection layer (stereo), the HUD quad (stereo,
+// Order, bottom to top: a projection layer in every rendered mode (black in
+// mono/warp holds, screen-corner views in cinema), the HUD quad (stereo,
 // with alpha), the panel quad (mono), the black fade quad. The eyes are
 // submitted with the poses and fovs they were rendered with, which are the
 // layers' views (diag_yaw can turn them), not the runtime's.

@@ -15,6 +15,9 @@ struct VrTickInfo {
     bool gameplay_camera; // ... through a Lakitu camera node (geo_camera_main)
     bool in_main_menu; // the DJUI main menu is up (its background level renders)
     bool star_select; // the act selector: its fixed-camera star row renders in stereo
+    unsigned char cutscene, camera_mode; // read-only snapshot from geo_camera_main
+    short cutscene_timer, cutscene_shot; // shot-local timer: never used as the cinema gate
+    float camera_fov; // vertical game-camera FOV, degrees (sky pass)
     bool transition; // a warp transition (iris, fade) is drawn this tick
     // The transition as a fade over the view: 0 = clear, 1 = covered by
     // transition_rgb. transition_hold: the game has stopped rendering behind a
