@@ -49,8 +49,17 @@ void djui_slider_update_value(struct DjuiBase* base) {
     u32* value = slider->value;
     djui_base_set_size(&slider->rectValue->base, ((f32)*value - min) / ((f32)max - min), 1.0f);
 
+#ifdef SM64_VR
+    char textStr[32];
+    if (slider->format != NULL) {
+        slider->format(base, *value, textStr, sizeof(textStr));
+    } else {
+        snprintf(textStr, sizeof(textStr), "%u", *value);
+    }
+#else
     char textStr[16];
     snprintf(textStr, sizeof(textStr), "%u", *value);
+#endif
     djui_text_set_text(slider->textValueForeground, textStr);
     djui_text_set_text(slider->textValueBackground, textStr);
 }

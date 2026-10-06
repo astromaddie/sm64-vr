@@ -55,6 +55,11 @@ static struct {
     vr_perf_t perf;
     double tick_ms;
     vr_rate_t rate; // is the display rate held? (reported once)
+
+    // Runtime settings changes waiting to be written
+    bool settings_dirty;
+    double settings_changed_s;
+    unsigned settings_revision;
 } vr;
 
 static float setting(const char *name) {
@@ -71,6 +76,56 @@ bool vr_exit_requested(void) {
 
 const vr_settings_t *vr_settings(void) {
     return &vr.settings;
+}
+
+// A change made on the in-headset page is written once the page has been quiet for this long
+#define VR_SETTINGS_SAVE_DELAY_S 0.5
+
+static double now_seconds(void) {
+    return (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
+}
+
+double vr_setting_get(const char *key) {
+    return vr_settings_get(&vr.settings, key);
+}
+
+bool vr_setting_set(const char *key, double value) {
+    if (!vr.enabled || !vr_settings_set(&vr.settings, key, value)) {
+        return false;
+    }
+    // The renderer's copy is rebuilt from the registry values, so a key another feature
+    // adds to vr_render_settings_from() is picked up with no change here
+    vr_render_settings_from(&vr.render_settings, &vr.settings);
+    vr_render_apply_settings(&vr.render_settings);
+    vr.settings_revision++;
+    vr.settings_dirty = true;
+    vr.settings_changed_s = now_seconds();
+    return true;
+}
+
+bool vr_setting_reset(const char *key) {
+    return vr_setting_set(key, vr_settings_default(key));
+}
+
+void vr_settings_flush(void) {
+    if (!vr.settings_dirty) {
+        return;
+    }
+    vr.settings_dirty = false;
+    if (!vr.settings.path[0]) {
+        return; // no data dir: the values live in memory only
+    }
+    if (!vr_settings_save(&vr.settings)) {
+        vr_logf("settings: could not write %s; the changes stay in memory", vr.settings.path);
+    }
+}
+
+unsigned vr_settings_revision(void) {
+    return vr.settings_revision;
+}
+
+void vr_recentre_now(void) {
+    vr_request_recentre();
 }
 
 const char *vr_data_dir(void) {
@@ -240,6 +295,7 @@ void vr_shutdown(void) {
     vr_xr_swapchain_destroy(&vr.xr, &vr.fade);
     vr_xr_destroy(&vr.xr);
     vr_gl_shutdown();
+    vr_settings_flush();
     vr_settings_free(&vr.settings);
     vr_logf("VR shut down after %llu ticks", (unsigned long long)vr.ticks_total);
 }
@@ -250,6 +306,9 @@ void vr_shutdown(void) {
 
 bool vr_frame_begin(void) {
     vr_xr_poll_events(&vr.xr);
+    if (vr.settings_dirty && now_seconds() - vr.settings_changed_s >= VR_SETTINGS_SAVE_DELAY_S) {
+        vr_settings_flush();
+    }
 
     // A system recentre (the runtime moved the LOCAL origin), focus gained
     // (maybe another wearer) or the input layer's request (L View held): the

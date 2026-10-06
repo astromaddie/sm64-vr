@@ -19,6 +19,9 @@
 #include "vr_math.h"
 #include "pc/gfx/gfx_vr.h"
 
+// The pause menu (and the VR settings page under it) is drawn on the HUD quad
+extern bool gDjuiPanelPauseCreated;
+
 // The sky sphere's clip planes: its vertices sit 10000 units out (skybox.c)
 #define VR_SKY_NEAR 100.0f
 #define VR_SKY_FAR 30000.0f
@@ -75,6 +78,8 @@ static struct {
     vr_game_cam_t cam;
     vr_pose_t hud_pose;
     float hud_width, hud_height;
+    bool hud_menu_placed; // the HUD quad is held where the pause menu opened
+    uint32_t hud_menu_recentres;
     bool dump_this_frame;
     bool holding; // held behind a closed warp transition (full fade, no eyes)
     uint32_t frames;
@@ -544,7 +549,8 @@ static void replay_hud(Gfx *dl, vr_layers_t *layers) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     vrr.provider.release(vrr.provider.user, VR_SURFACE_HUD);
 
-    layers->hud = vrr.st.hud_visible;
+    // hud_visible hides the HUD, not the pause menu: the settings page that turns it off is on this quad
+    layers->hud = vrr.st.hud_visible || gDjuiPanelPauseCreated;
     layers->hud_pose = vrr.hud_pose;
     layers->hud_width = vrr.hud_width;
     layers->hud_height = vrr.hud_height;
@@ -618,6 +624,16 @@ void vr_render_init(const vr_render_settings_t *settings, const vr_provider_t *p
     vr_logf("render: 2D layout %dx%d, world_scale %.1f units/m, level_pitch %d, hud %.2f m at %.0f%%, panel %.2f m x %.2f m",
         settings->ui_width, settings->ui_height, settings->rig.world_scale, settings->rig.level_pitch,
         settings->hud_distance, settings->hud_scale, settings->panel_distance, settings->panel_width);
+}
+
+void vr_render_apply_settings(const vr_render_settings_t *settings) {
+    if (!vrr.ready) {
+        return;
+    }
+    int ui_width = vrr.st.ui_width, ui_height = vrr.st.ui_height;
+    vrr.st = *settings;
+    vrr.st.ui_width = ui_width;
+    vrr.st.ui_height = ui_height;
 }
 
 void vr_render_shutdown(void) {
@@ -730,7 +746,13 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         vr_cylboard_rotation(&vrr.cam, &head_cam, gVrCylboardRot);
         gVrBillboardHead = true;
 
-        vr_hud_pose(&vrr.head, vrr.st.hud_distance, &vrr.hud_pose);
+        // The pause menu (and the VR settings page) is placed where the head looked when it opened and
+        // stays there until a recentre (standard.md section 3); the gameplay HUD follows the head
+        if (!gDjuiPanelPauseCreated || !vrr.hud_menu_placed || vrr.hud_menu_recentres != vrr.stage.recentres_applied) {
+            vr_hud_pose(&vrr.head, vrr.st.hud_distance, &vrr.hud_pose);
+            vrr.hud_menu_placed = gDjuiPanelPauseCreated;
+            vrr.hud_menu_recentres = vrr.stage.recentres_applied;
+        }
         vr_hud_size(vrr.st.hud_distance, vrr.st.hud_scale, (float)vrr.st.ui_width / (float)vrr.st.ui_height,
             &vrr.hud_width, &vrr.hud_height);
 

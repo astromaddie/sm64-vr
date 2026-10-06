@@ -47,6 +47,11 @@ void vr_render_shutdown(void);
 // Applied at the next stereo frame; the panel is re-placed at the next mono one.
 void vr_render_request_recentre(void);
 
+// Replaces the settings the renderer reads (from vr_render_settings_from()) between
+// frames, so a change on the in-headset page shows on the next XR frame. Sizes that
+// were used to create surfaces (ui_width, ui_height) are kept.
+void vr_render_apply_settings(const vr_render_settings_t *settings);
+
 // One XR frame. `renders` is false in standby: nothing is drawn and `layers`
 // comes back empty. Fills `layers` with what to submit.
 void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t *layers);

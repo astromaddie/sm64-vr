@@ -35,6 +35,18 @@ bool vr_enabled(void);
 bool vr_exit_requested(void);
 const vr_settings_t *vr_settings(void);
 
+// Runtime settings, for the in-headset page (docs/VR_ARCHITECTURE.md section 10).
+// A change is clamped like the file's values, applied on the next XR frame (the
+// renderer's settings are rebuilt, and everything that reads vr_settings() or
+// vr_setting_get() each frame sees it) and written to vr.toml shortly after the
+// last change (vr_settings_flush() writes at once). All of these are for the game thread.
+double vr_setting_get(const char *key); // effective value; 0 for an unknown key
+bool vr_setting_set(const char *key, double value); // false when unknown or unchanged
+bool vr_setting_reset(const char *key); // back to the default
+void vr_settings_flush(void); // save now if anything changed
+unsigned vr_settings_revision(void); // counts changes, for code that caches a setting
+void vr_recentre_now(void); // as holding L View: the next stereo frame recentres on the head
+
 // The size the game's 2D layout uses (the window size it sees in VR).
 void vr_ui_size(int *width, int *height);
 
