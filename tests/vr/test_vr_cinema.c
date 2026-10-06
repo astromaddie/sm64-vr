@@ -19,6 +19,7 @@
 #include "vr.h"
 #include "vr_input.h"
 #include "vr_settings.h"
+#include "cinema_game_path.h"
 #endif
 
 #define SEC 1000000000LL
@@ -214,6 +215,36 @@ static void test_positive_parallax(void) {
     }
 }
 
+static void test_picture_aspect(void) {
+    const float aspects[] = {1, 4.f / 3.f, 16.f / 9.f, 21.f / 9.f};
+    const float degrees[] = {29, 45, 80};
+    vr_game_cam_t cam;
+    float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    CHECK(vr_game_cam_from_view(identity, &cam));
+    for (unsigned a = 0; a < sizeof(aspects) / sizeof(aspects[0]); a++) {
+        for (unsigned d = 0; d < sizeof(degrees) / sizeof(degrees[0]); d++) {
+            float ty = tanf(degrees[d] * 3.14159265358979323846f / 360.f);
+            float source[16];
+            vr_projection_tan(-ty * aspects[a], ty * aspects[a], ty, -ty, 100, 20000, source);
+            source[8] = 0.1f; // preserve an authored asymmetric lens centre
+            source[9] = -0.05f;
+            for (int e = 0; e < 2; e++) {
+                vr_eye_cam_t eye;
+                float fov[4], projection[16];
+                CHECK(vr_cinema_game_eye(&cam, source, 0.069f, 3.6f, e, &eye, fov, projection));
+                CHECK_NEAR(projection[5] / projection[0], 16.f / 9.f, 1e-5);
+                CHECK_NEAR(projection[5], source[5], 1e-6);
+                CHECK_NEAR(projection[9], source[9], 1e-6);
+                CHECK_NEAR(projection[10], source[10], 1e-6);
+                CHECK_NEAR(projection[14], source[14], 1e-6);
+                // Equal camera-space lengths have equal lengths on the
+                // physical picture, even for a mod's non-16:9 projection.
+                CHECK_NEAR(projection[0] * 3.6f, projection[5] * 2.025f, 1e-5);
+            }
+        }
+    }
+}
+
 static void test_cinema_frame_and_transitions(void) {
     tracked_eyes(0.7f);
     vr_stage_t stage;
@@ -291,6 +322,7 @@ static void test_settings(void) {
     CHECK_NEAR(render.cinema_distance, 3, 1e-6);
     CHECK_NEAR(render.cinema_width, 3.6, 1e-6);
     CHECK_NEAR(render.diag_cinema_seconds, 0, 1e-6);
+    CHECK_NEAR(vr_settings_get(&settings, "diag_dialog_cutscene_seconds"), 0, 0);
     const char *text = "version = 2\n[vr]\ncutscenes = 1\ncinema_distance = 2.5\ncinema_width = 4.2\ndiag_cinema_seconds = 12\n";
     vr_settings_parse(&settings, text, strlen(text));
     char *saved = vr_settings_format(&settings, NULL);
@@ -310,10 +342,12 @@ static void test_settings(void) {
     vr_settings_set(&again, "cinema_distance", -100);
     vr_settings_set(&again, "cinema_width", 100);
     vr_settings_set(&again, "diag_cinema_seconds", 500);
+    vr_settings_set(&again, "diag_dialog_cutscene_seconds", 500);
     CHECK_NEAR(vr_settings_get(&again, "cutscenes"), 1, 0);
     CHECK_NEAR(vr_settings_get(&again, "cinema_distance"), 1, 0);
     CHECK_NEAR(vr_settings_get(&again, "cinema_width"), 10, 0);
     CHECK_NEAR(vr_settings_get(&again, "diag_cinema_seconds"), 120, 0);
+    CHECK_NEAR(vr_settings_get(&again, "diag_dialog_cutscene_seconds"), 120, 0);
     free(saved);
     vr_settings_free(&settings);
     vr_settings_free(&again);
@@ -327,6 +361,7 @@ static GLuint render_images[VR_SURFACE_COUNT], triangle_program, triangle_vao;
 static struct GfxVrPassStats render_stats;
 static bool fail_right_eye;
 static float source_projection[16];
+static Vp source_viewport = {{{640, 480, 511, 0}, {640, 480, 511, 0}}};
 
 static bool render_acquire(void *user, vr_surface_t surface, vr_target_t *out) {
     (void)user;
@@ -376,7 +411,16 @@ void gfx_vr_run_pass(Gfx *dl, const struct GfxVrPass *pass) {
     glDisable(GL_SCISSOR_TEST);
     if (pass->kind == GFX_VR_PASS_EYE) {
         float projection[16];
-        pass->world_proj(source_projection, projection, pass->user);
+        float rect[4];
+        cinema_fast3d_load(pass, source_projection, &source_viewport, projection, rect, &render_stats);
+        CHECK_INT(render_stats.world_proj_loads, 1);
+        if (pass->cinema) {
+            CHECK_NEAR(rect[0], 0, 0);
+            CHECK_NEAR(rect[1], 0, 0);
+            CHECK_NEAR(rect[2], pass->width, 0);
+            CHECK_NEAR(rect[3], pass->height, 0);
+        }
+        glViewport((int)rect[0], (int)rect[1], (int)rect[2], (int)rect[3]);
         if (pass->sky_proj_live) {
             CHECK_NEAR(pass->sky_proj_live[0], projection[0], 1e-5);
             CHECK_NEAR(pass->sky_proj_live[5], projection[5], 1e-5);
@@ -386,9 +430,8 @@ void gfx_vr_run_pass(Gfx *dl, const struct GfxVrPass *pass) {
         glUseProgram(triangle_program);
         glUniformMatrix4fv(glGetUniformLocation(triangle_program, "projection"), 1, GL_FALSE, projection);
         glBindVertexArray(triangle_vao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
         glUseProgram(0);
-        render_stats.world_proj_loads = 1;
     } else if (pass->kind == GFX_VR_PASS_HUD) {
         // An authored box with margins, over the renderer's black/white clears.
         glEnable(GL_SCISSOR_TEST);
@@ -451,6 +494,76 @@ static void check_black_eyes(void) {
     free(pixels);
 }
 
+static void check_square_picture(const vr_layers_t *layers) {
+    unsigned char *pixels = malloc(512 * 512 * 4);
+    CHECK(pixels != NULL);
+    for (int e = 0; e < 2; e++) {
+        glBindTexture(GL_TEXTURE_2D, render_images[e]);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        int x0 = 512, y0 = 512, x1 = -1, y1 = -1;
+        for (int y = 0; y < 512; y++) {
+            for (int x = 0; x < 512; x++) {
+                if (pixels[4 * (512 * y + x)] > 100) {
+                    if (x < x0) { x0 = x; }
+                    if (x > x1) { x1 = x; }
+                    if (y < y0) { y0 = y; }
+                    if (y > y1) { y1 = y; }
+                }
+            }
+        }
+        CHECK(x1 > x0 && y1 > y0);
+        const float *fov = layers->views[e].fov;
+        float picture_aspect = (tanf(fov[1]) - tanf(fov[0])) / (tanf(fov[2]) - tanf(fov[3]));
+        CHECK_NEAR(picture_aspect, 16.f / 9.f, 1e-5);
+        float visible_aspect = (float)(x1 - x0 + 1) / (y1 - y0 + 1) * picture_aspect;
+        CHECK_NEAR(visible_aspect, 1, 0.025); // pixel rounding at the widest FOV
+    }
+    free(pixels);
+}
+
+static void check_dialog_projection_variants(void) {
+    // Signs, NPCs, Bob-omb/Whomp boss dialogue and Bowser introductions all
+    // share the production cinema branch; modes use camera.h's actual ids.
+    const unsigned ids[] = {VR_CS_READ_MESSAGE, VR_CS_DIALOG, VR_CS_DIALOG, VR_CS_DIALOG,
+        VR_CS_DIALOG, VR_CS_ENTER_BOWSER_ARENA, VR_CS_INTRO_PEACH};
+    const unsigned modes[] = {1, 1, 4, 8, 11, 11, 1};
+    const float aspects[] = {1, 4.f / 3.f, 16.f / 9.f, 21.f / 9.f};
+    const float delta[] = {0, 0.5f, 1};
+    const Vp viewports[] = {
+        {{{640,480,511,0}, {640,480,511,0}}},
+        {{{640,320,511,0}, {640,480,511,0}}}, // letterbox viewport
+        {{{320,400,511,0}, {560,520,511,0}}}  // shifted/narrow viewport
+    };
+    unsigned frames = 0;
+    // Confirm this executable links the game's colliding symbol. A libc-only
+    // fixture was the reason the original screen-corner tests passed.
+    float (*volatile game_atan2f)(float, float) = atan2f;
+    CHECK(fabsf(game_atan2f(1, 2) - (float)atan2(1, 2)) > 0.5f);
+    for (unsigned c = 0; c < sizeof(ids) / sizeof(ids[0]); c++) {
+        gVrTick.cutscene = ids[c];
+        gVrTick.camera_mode = modes[c];
+        gVrTick.camera_fov = 15; // deliberately unlike the retained/interpolated matrix
+        for (unsigned a = 0; a < sizeof(aspects) / sizeof(aspects[0]); a++) {
+            for (unsigned d = 0; d < sizeof(delta) / sizeof(delta[0]); d++) {
+                bool valid = cinema_game_projection(29, 80, aspects[a], delta[d], source_projection);
+                CHECK(valid); // real patch_mtx_interpolated must retain the MATRIX address
+                if (!valid) { continue; }
+                for (unsigned v = 0; v < sizeof(viewports) / sizeof(viewports[0]); v++) {
+                    source_viewport = viewports[v];
+                    vr_layers_t layers = render_at(SEC + 700000000 + frames * 1000000);
+                    CHECK_INT(vr_render_info()->mode, VR_MODE_CINEMA);
+                    CHECK_INT(vr_render_info()->world_proj_loads[0], 1);
+                    CHECK_INT(vr_render_info()->world_proj_loads[1], 1);
+                    check_square_picture(&layers);
+                    frames++;
+                }
+            }
+        }
+    }
+    source_viewport = viewports[0];
+    printf("cinema production path: %u stereo frames, 7 cutscene/mode pairs, 4 aspects, 3 interpolated FOVs, 3 viewports\n", frames);
+}
+
 static void test_renderer_routing_and_images(void) {
     CHECK_INT(SDL_Init(SDL_INIT_VIDEO), 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -469,7 +582,8 @@ static void test_renderer_routing_and_images(void) {
     glBindBuffer(GL_ARRAY_BUFFER, game_vbo);
 
     const char *vs = "#version 330 core\nuniform mat4 projection;\nvoid main(){\n"
-        "vec3 v[3]=vec3[3](vec3(-220,-150,-1000),vec3(220,-150,-1000),vec3(0,150,-1000));\n"
+        "vec3 v[6]=vec3[6](vec3(-150,-150,-1000),vec3(150,-150,-1000),vec3(150,150,-1000),"
+        "vec3(-150,-150,-1000),vec3(150,150,-1000),vec3(-150,150,-1000));\n"
         "gl_Position=projection*vec4(v[gl_VertexID],1);}\n";
     const char *fs = "#version 330 core\nout vec4 c;\nvoid main(){c=vec4(0.9,0.2,0.1,1);}\n";
     GLuint vertex = render_shader(GL_VERTEX_SHADER, vs), fragment = render_shader(GL_FRAGMENT_SHADER, fs);
@@ -533,6 +647,8 @@ static void test_renderer_routing_and_images(void) {
     CHECK_INT(band[3], 255); // black margins are opaque, not transparent overlays
     CHECK_INT(band[0], 0);
     CHECK_INT(band[4 * (320 * 60 + 150)], 255); // authored white box survives the resolve
+    check_square_picture(&layers);
+    check_dialog_projection_variants();
 
     // A closed warp keeps cinema but clears both projection images to black.
     gVrTick.rendered_area = false;
@@ -627,6 +743,7 @@ int main(void) {
     RUN(test_latch);
     RUN(test_screen_corners);
     RUN(test_positive_parallax);
+    RUN(test_picture_aspect);
     RUN(test_cinema_frame_and_transitions);
     RUN(test_settings);
 #ifdef VR_CINEMA_RENDER_TEST

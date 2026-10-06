@@ -190,7 +190,8 @@ Comfort keys (section 4; all live):
 
 Environment variables `SM64_VR_<KEY>` override a key for one run. Diagnostics: `force_render`
 (draw and run in standby with a synthetic head), `diag_yaw`, `dump_frame`, `dump_worn_frame`,
-`probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, `diag_cinema_seconds` (section 11),
+`probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, `diag_cinema_seconds`,
+`diag_dialog_cutscene_seconds` (section 11),
 `diag_turn_stick` (section 4), and `timing` for the `[vr-perf]` line every 10 s
 (`fps`, `missed`, `cpu`, `tick`, `replay`, `hud`, `eye`, `gpu`). The stages are CPU submission times;
 `gpu` is the GPU time of the eye and HUD passes from timestamp queries read a few frames late. While
@@ -282,6 +283,8 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | built, not run |
 | Cinema screen corners, positive parallax, display-time latch, stage fades, cinema projection-layer structs and settings | pure test; headset-unverified |
 | Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | verified unattended 2026-10-06 for the eye replay (`diag_cinema_seconds = 10` on the menu background: mode cinema, screen 3.0 m, 3.6 x 2.0 m, both eyes letterboxed with everything behind the screen; 120 fps). Text band and real cutscene classification: device-unverified; not worn |
+| Cinema aspect and interpolated projection load | host render 2026-10-07: production game math, interpolation and Fast3D matrix/viewport consumers; 252 stereo frames across dialog/intro ids, 4 source aspects, 3 interpolated FOVs and 3 viewports; rendered squares preserve shape in both eyes. Fix is device-unverified and not worn; King Whomp vertical stretch was reported worn before this fix |
+| One-shot boss-mode dialog diagnostic | built and settings-tested; real camera/dialog run still device-unverified. Uses Mario as focus with King Whomp text, not a warp to the summit |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
 | Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | deployed and run on the Frame 2026-10-06 (merged main 38072d349) |
 | VR-disabled flat build and source identity of modified shared translation units | linked AArch64 executable; VR-off tokens identical to lane base; flat game not played |
@@ -358,8 +361,23 @@ Their parallel baseline is derived from runtime IPD; their off-axis frusta conve
 clip plane. Visible content therefore has zero or positive parallax, with infinity disparity limited
 to 60% of IPD on the screen. Near/far depth mapping is kept, including fog. A small optional live sky
 projection pointer in `GfxVrPass` keeps sky and world FOVs matched to the interpolated game projection.
-The camera-space eye shift
-is applied analytically, avoiding cancellation roundoff from large world coordinates.
+Horizontal projection scale is adapted to 16:9 from the **retained matrix's** vertical scale, preserving
+its interpolated FOV, asymmetric lens centre and near/far mapping. Tick FOV is only the initial sky
+fallback. Cinema world/sky viewports fill the picture even when the game overrides its viewport;
+authored scissors remain clipping operations, and HUD/panel/gameplay viewport behavior is unchanged.
+The camera-space eye shift is applied analytically, avoiding cancellation roundoff from large world
+coordinates.
+
+The 2026-10-07 host reproduction found a production-linkage defect: SM64 exports `atan2f` with its
+game-axis convention. Cinema's screen-corner calls resolved to it in the game but to libc in the old
+host fixture, submitting a reciprocal 9:16 frustum for a 16:9 picture. Linking the actual
+`src/engine/math_util.c` made the original screen-corner suite fail 64 checks. Cinema now explicitly
+uses libc's double `atan2`. The same investigation reproduced `patch_mtx_interpolated` retaining the
+**GraphNodePerspective address** instead of the generated matrix, bypassing perspective replacement.
+The VR-only path now retains the matrix address. Source-aspect leakage was also reproduced with
+4:3/ultrawide projections; cinema now normalizes it rather than stretching it across the screen.
+These are host reproductions of the defective paths; the specific worn King Whomp scene still needs
+an eye dump and wear check to confirm the full reported symptom is resolved.
 
 Both eye images go into **one OpenXR projection layer**, never per-eye quad layers. Each submitted
 view has the screen's orientation, that runtime eye's position, and `atan2` FOVs through the screen
@@ -380,16 +398,38 @@ chooses to emit during a cutscene.
 | `cinema_distance` | 3.0 m | 1.0–10.0 m |
 | `cinema_width` | 3.6 m | 0.5–10.0 m; picture height = width × 9/16 |
 | `diag_cinema_seconds` | 0 | 0–120 s; 0 disables; starts at the first usable gameplay camera, including the main-menu background |
+| `diag_dialog_cutscene_seconds` | 0 | 0–120 s; one real `CUTSCENE_DIALOG` in `CAMERA_MODE_BOSS_FIGHT`, after 30 settled live gameplay ticks; uses Mario as speaking-object focus and King Whomp's authored text; restores the previous mode/focus at expiry |
 
 For unattended integration checks use `force_render = true`, `diag_cinema_seconds = 10`,
 `dump_frame = 120`, and `timing = true`. The forced route still respects `force_mono`, never changes
 simulation or loads a level, and leaves act select alone. The ordinary New Game intro exercises real
 classification. `vr-state.txt` includes `mode cinema`, latch/request details, cutscene/mode/shot/timer,
 screen pose/size and both submitted eye poses/FOVs, alongside the virtual game eyes. Cinema reports
-virtual eye spacing in game units and runtime IPD in metres; it never converts that spacing through
+the actual matrix's source aspect/FOV, tick FOV, normalized picture aspect and `world_proj_loads` for
+each eye (must be nonzero), virtual eye spacing in game units and runtime IPD in metres; it never converts that spacing through
 gameplay `world_scale`. `[vr-perf]` names
 cinema separately from mono and stereo. Eye dumps are the square storage images; resize them to 16:9
 to inspect the picture as seen on the screen.
+
+For the coordinator's unattended **real dialog** check, install the integrated package and claim the
+Frame according to the port playbook, then run from the coordinator checkout:
+
+```sh
+tools/steam_frame/run_unattended.sh --seconds 40 --out build/device-dumps/cinema-dialog \
+  --env SM64_VR_FORCE_MONO=0 --env SM64_VR_CUTSCENES=0 \
+  --env SM64_VR_DIAG_CINEMA_SECONDS=0 --env SM64_VR_DIAG_DIALOG_CUTSCENE_SECONDS=30 \
+  --env SM64_VR_DUMP_FRAME=1200 --env SM64_VR_TIMING=1 \
+  -- --server 7777 --skip-intro --skip-update-check --disable-mods --no-discord
+```
+
+The runner already sets `force_render`. Confirm the diagnostic armed log and `vr-state.txt`:
+`mode cinema`, `cutscene=162`, `camera_mode=11`, nonzero world projection loads in **both** eyes,
+`picture_aspect=1.777778`, and screen height = width × 9/16. Compare both PNGs resized to 16:9,
+including the sky, Mario's proportions and the opaque dialogue band; expiry should restore gameplay.
+These env overrides last only for that run. It exercises the real camera/dialog pipeline in the
+current scene, not King Whomp's actual encounter or controller input. Wear check: talk to King Whomp
+at the summit, then a sign/NPC, Bob-omb King and Bowser; confirm stable proportions, readable text,
+stereo depth, and correct entry/exit/recentre.
 
 ### Cutscene policy
 
@@ -473,17 +513,25 @@ screen; positive parallax from the near plane to the far plane with an asymmetri
 non-origin camera; refresh-independent 72/90/120 Hz hysteresis; warp holds; all mode fade timings;
 anchor persistence/recentre; settings save/load/clamp; and an intro-classified frame whose projection
 views match the screen and each runtime eye. Existing rig/maths/composition/settings checks run too.
-The pure suite has 945 checks. An additional Mesa 4.5 offscreen host check calls the actual
-`vr_render_frame` with a synthetic retained-list producer, then reads its GL eye/HUD targets outside
-the frame: 110 additional checks cover distinct stereo eye images, opaque black text-band margins,
+An additional Mesa 4.5 offscreen host check links the actual game `math_util.c`, perspective builder,
+`patch_mtx_interpolated`, and Fast3D matrix/viewport consumers, calls the actual `vr_render_frame`
+with a synthetic retained-list producer, then reads its GL eye/HUD targets outside the frame.
+It checks rendered-square proportions across 252 stereo frames (7 cutscene/mode pairs × 4 source
+aspects × 3 interpolated FOVs × 3 viewports), the retained matrix address, nonzero projection
+replacement counts and exact screen corners in the presence of the game's colliding `atan2f`.
+The full host cinema executable has 8 cases and 8,255 checks. The old `vr_cinema.c` linked into
+this same executable fails 1,112 checks. Further checks cover distinct stereo eye images, opaque black text-band margins,
 matching interpolated sky/world FOV, cinema holds/gaps, black mono/warp eye pixels, act-select routing
 (including a conflicting gameplay flag and stale cutscene id),
 the immersive setting, diagnostic activation/expiry and acquisition failure. It is a **host renderer
 check, not a real SM64 scene, device run or worn acceptance**. Strict host compilation exposed a
 pre-existing dump-path truncation warning; the dump slot now has room for the directory and filename.
-The checkout lacks the
-`tests/vr/Makefile` and `tools/verify_flat_build_unchanged.sh` referred to by the generic Docker wrapper;
-use the bounded runner above and the recorded direct flat build check for this lane.
+`tools/docker/build-linux.sh tests` runs all host suites, including this bounded renderer check.
+The checkout lacks `tools/verify_flat_build_unchanged.sh` referred to by the wrapper's `verify` step;
+use the recorded direct flat build check below. The 2026-10-07 aspect lane also compared the changed
+camera, graph-renderer and Fast3D translation units' VR-off preprocessor output against the branch
+base; only assertion source-line metadata needed normalization. This is source parity evidence,
+not a new flat runtime check.
 
 The direct flat build uses the same image and default build options:
 

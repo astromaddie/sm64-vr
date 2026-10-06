@@ -55,6 +55,7 @@ typedef struct {
     bool cinema;
     int eye_index;
     float ipd, screen_width;
+    float source_aspect, source_fov; // actual retained matrix, for cinema dumps
 } vr_eye_ctx_t;
 
 static struct {
@@ -517,6 +518,11 @@ static void dump_state_log(const vr_layers_t *layers) {
             fprintf(f, "eye%d game pos=%.3f,%.3f,%.3f forward=%.4f,%.4f,%.4f tris=%u world_proj_loads=%u\n", e,
                 ec->position[0], ec->position[1], ec->position[2], -ec->rotation[6], -ec->rotation[7], -ec->rotation[8],
                 vrr.info.tris_eye[e], vrr.info.world_proj_loads[e]);
+            if (vrr.stage.mode == VR_MODE_CINEMA) {
+                const vr_eye_ctx_t *c = &vrr.eye_ctx[e];
+                fprintf(f, "eye%d cinema projection source_aspect=%.6f source_fov=%.3f tick_fov=%.3f picture_aspect=%.6f\n",
+                    e, c->source_aspect, c->source_fov, gVrTick.camera_fov, 16.0 / 9.0);
+            }
         }
         float d[3];
         for (int i = 0; i < 3; i++) {
@@ -550,6 +556,8 @@ static void dump_state_log(const vr_layers_t *layers) {
 static void world_proj(const float game_proj[16], float out[16], void *user) {
     vr_eye_ctx_t *c = user;
     if (c->cinema) {
+        c->source_aspect = game_proj[0] > 0 ? game_proj[5] / game_proj[0] : 0;
+        c->source_fov = game_proj[5] > 0 ? (float)(atan(1.0 / game_proj[5]) * 360.0 / M_PI) : 0;
         if (!vr_cinema_game_eye(&c->cam, game_proj, c->ipd, c->screen_width,
                 c->eye_index, &c->eye, c->fov, out)) {
             // An unsupported projection is safely flat on the cinema screen.
@@ -610,6 +618,7 @@ static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
         pass.kind = GFX_VR_PASS_EYE;
         pass.width = t.width;
         pass.height = t.height;
+        pass.cinema = vrr.eye_ctx[e].cinema;
         pass.world_proj = world_proj;
         pass.user = &vrr.eye_ctx[e];
         vr_eye_sky_proj(&vrr.eye_ctx[e].eye, vrr.eye_ctx[e].fov, VR_SKY_NEAR, VR_SKY_FAR, pass.sky_proj);
@@ -1111,6 +1120,7 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
                 c->eye_index = e;
                 c->ipd = ipd;
                 c->screen_width = vrr.cinema_screen.width;
+                c->source_aspect = c->source_fov = 0;
                 vr_cinema_game_eye(&c->cam, game_proj, ipd, c->screen_width, e, &c->eye, c->fov, NULL);
             }
             vr_cinema_band(&vrr.cinema_screen, &vrr.hud_pose, &vrr.hud_width, &vrr.hud_height);

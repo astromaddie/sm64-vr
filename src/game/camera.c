@@ -41,6 +41,7 @@
 #ifdef SM64_VR
 #include "pc/vr/vr_game.h"
 #include "pc/vr/vr_turn.h"
+#include "pc/vr/vr_dialog_diag.h"
 
 // A VR comfort turn holds the Lakitu (default) camera's heading: it does not
 // swing back behind an idle Mario until he moves or the player turns it
@@ -3450,6 +3451,9 @@ void update_camera(struct Camera *c) {
         gLakituState.mode = CAMERA_MODE_NEWCAM;
     }
 
+#ifdef SM64_VR
+    vr_dialog_diag_tick(c);
+#endif
     if (c->cutscene != 0) {
         sYawSpeed = 0;
         play_cutscene(c);

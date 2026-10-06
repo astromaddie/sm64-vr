@@ -68,10 +68,13 @@ bool vr_cinema_views(const vr_cinema_screen_t *s, const vr_view_t eyes[2], vr_vi
         }
         views[e].pose = eyes[e].pose;
         memcpy(views[e].pose.orientation, s->pose.orientation, sizeof(s->pose.orientation));
-        views[e].fov[0] = atan2f(-s->width * 0.5f - p[0], p[2]);
-        views[e].fov[1] = atan2f( s->width * 0.5f - p[0], p[2]);
-        views[e].fov[2] = atan2f( s->height * 0.5f - p[1], p[2]);
-        views[e].fov[3] = atan2f(-s->height * 0.5f - p[1], p[2]);
+        // SM64 exports an atan2f with game-axis semantics. Use libc's double
+        // atan2, as vr_math does: otherwise the submitted screen is reciprocal
+        // aspect (9:16), even though the game picture was drawn for 16:9.
+        views[e].fov[0] = (float)atan2(-s->width * 0.5f - p[0], p[2]);
+        views[e].fov[1] = (float)atan2( s->width * 0.5f - p[0], p[2]);
+        views[e].fov[2] = (float)atan2( s->height * 0.5f - p[1], p[2]);
+        views[e].fov[3] = (float)atan2(-s->height * 0.5f - p[1], p[2]);
     }
     memcpy(out, views, sizeof(views));
     return true;
@@ -93,8 +96,12 @@ bool vr_cinema_game_eye(const vr_game_cam_t *cam, const float proj[16],
         || !(width > 0.0f) || !isfinite(ipd) || ipd < 0.0f || (eye != 0 && eye != 1)) {
         return false;
     }
-    float left = (proj[8] - 1.0f) / proj[0];
-    float right = (proj[8] + 1.0f) / proj[0];
+    // A square eye texture is mapped onto our fixed 16:9 picture. Keep the
+    // actual interpolated vertical FOV and lens centre, but adapt horizontal
+    // scale to that surface; the game's 4:3/mod/window aspect cannot leak in.
+    float xscale = proj[5] * (9.0f / 16.0f);
+    float left = (proj[8] - 1.0f) / xscale;
+    float right = (proj[8] + 1.0f) / xscale;
     float up = (proj[9] + 1.0f) / proj[5];
     float down = (proj[9] - 1.0f) / proj[5];
     float separation = 0.6f * ipd * (right - left) * near / width;
@@ -114,8 +121,9 @@ bool vr_cinema_game_eye(const vr_game_cam_t *cam, const float proj[16],
     fov[3] = atanf(down);
     if (projection) {
         memcpy(projection, proj, 16 * sizeof(float));
-        projection[8] -= proj[0] * shift;
-        projection[12] -= proj[0] * offset;
+        projection[0] = xscale;
+        projection[8] -= xscale * shift;
+        projection[12] -= xscale * offset;
     }
     return true;
 }

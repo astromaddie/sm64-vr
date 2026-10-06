@@ -1436,6 +1436,17 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
     float x = (viewport->vtrans[0] / 4.0f) - width / 2.0f;
     float y = SCREEN_HEIGHT - ((viewport->vtrans[1] / 4.0f) + height / 2.0f);
 
+#ifdef SM64_VR
+    if (sVrPass.kind == GFX_VR_PASS_EYE && sVrPass.cinema
+        && (sVrSeg == GFX_VR_SEG_WORLD || sVrSeg == GFX_VR_SEG_SKY_VR)) {
+        // Cinema has its own picture surface/aspect. A game viewport override
+        // must not resize that projection; authored scissors still clip it.
+        width = SCREEN_WIDTH;
+        height = SCREEN_HEIGHT;
+        x = y = 0;
+    }
+#endif
+
     width *= RATIO_X;
     height *= RATIO_Y;
     x *= RATIO_X;

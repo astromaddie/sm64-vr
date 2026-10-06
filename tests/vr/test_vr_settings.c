@@ -75,7 +75,7 @@ static void test_registry(void) {
 		"world_scale", "level_pitch", "star_select_scale", "fov_mode", "diag_rate_unworn",
 		"follow_vehicle_rotation", "horizon_lock", "hud_mode", "hud_distance", "hud_scale",
 		"force_mono", "panel_distance", "panel_width",
-		"cutscenes", "cinema_distance", "cinema_width", "diag_cinema_seconds",
+		"cutscenes", "cinema_distance", "cinema_width", "diag_cinema_seconds", "diag_dialog_cutscene_seconds",
 		"resolution_scale", "refresh_rate", "probe_seconds", "force_render", "diag_yaw", "dump_frame", "timing",
 		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand",
 		"smooth_turn_speed", "vignette_strength", "move_relative", "height_offset", "head_translation",
@@ -87,12 +87,14 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 18);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 19);
 
 	// env names
 	char name[64];
 	CHECK(sfvr_settings_env_name("SM64", "resolution_scale", name, sizeof(name)));
 	CHECK_STR(name, "SM64_VR_RESOLUTION_SCALE");
+	CHECK(sfvr_settings_env_name("SM64", "diag_dialog_cutscene_seconds", name, sizeof(name)));
+	CHECK_STR(name, "SM64_VR_DIAG_DIALOG_CUTSCENE_SECONDS");
 }
 
 static void test_defaults_and_creation(void) {
@@ -105,6 +107,7 @@ static void test_defaults_and_creation(void) {
 	CHECK_NEAR(get(&s, "force_mono"), 0, 1e-9);
 	CHECK_NEAR(get(&s, "panel_distance"), 2.0, 1e-9);
 	CHECK_NEAR(get(&s, "probe_seconds"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "diag_dialog_cutscene_seconds"), 0, 1e-9);
 	CHECK_NEAR(get(&s, "hud_mode"), 0, 1e-9);
 	CHECK_NEAR(get(&s, "nonsense"), 0, 1e-9);
 
@@ -117,6 +120,7 @@ static void test_defaults_and_creation(void) {
 	CHECK(has(text, "vignette = false\n"));
 	CHECK(has(text, "world_scale = 104.0\n"));
 	CHECK(has(text, "hud_mode = \"near\"\n"));
+	CHECK(has(text, "diag_dialog_cutscene_seconds = 0.0\n"));
 	CHECK(has(text, "SM64_VR_<KEY>"));
 
 	// what was written reads back with nothing to repair, and is a fixed point
