@@ -286,7 +286,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Cinema aspect and interpolated projection load | host render 2026-10-07: production game math, interpolation and Fast3D matrix/viewport consumers; 252 stereo frames across dialog/intro ids, 4 source aspects, 3 interpolated FOVs and 3 viewports; rendered squares preserve shape in both eyes. Fix is device-unverified and not worn; King Whomp vertical stretch was reported worn before this fix |
 | One-shot boss-mode dialog diagnostic | built and settings-tested; real camera/dialog run still device-unverified. Uses Mario as focus with King Whomp text, not a warp to the summit |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
-| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | deployed and run on the Frame 2026-10-06 (merged main 38072d349) |
+| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | aspect fix built and packaged 2026-10-07: ELF AArch64, maximum glibc 2.34 below the 2.35 floor; all 416 package hashes verified. This fix is not deployed or worn |
 | VR-disabled flat build and source identity of modified shared translation units | linked AArch64 executable; VR-off tokens identical to lane base; flat game not played |
 
 ## 10. VR settings page
@@ -541,6 +541,17 @@ docker run --rm -v "$PWD":/src -w /src sm64-vr-linux \
 ```
 
 This ARM image's regular flat target has the `.arm` suffix; the VR target is unsuffixed.
+
+The 2026-10-07 aspect lane passed `tools/docker/build-linux.sh on`, `tests`, `package` and `abi`.
+After the cold native build, an incremental build recompiled the final camera hook and linked
+successfully. The executable is ELF AArch64; its maximum requirements are glibc 2.34 and
+GLIBCXX 3.4.29, below the glibc 2.35 release floor. All 416 staged file hashes were checked,
+and the staged executable matched the native build. Final package metadata uses a read-only
+mount of the common Git directory to record the worktree's clean committed revision.
+The native cinema object has four `atan2` relocations, and the executable imports libc's
+double-precision `atan2` while also exporting the game's conflicting `atan2f`.
+This proves the native link uses the corrected corner-angle function; it is not device or
+worn acceptance. Evidence logs are in `build/cinema-check/` in the aspect worktree.
 
 The 2026-10-06 lane validation also passed `tools/docker/build-linux.sh on`, `package` and `abi`
 inside `sm64-vr-linux`: the executable is ELF AArch64 and its maximum required glibc is 2.34,
