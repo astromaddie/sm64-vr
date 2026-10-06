@@ -141,6 +141,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Cinema screen corners, positive parallax, display-time latch, stage fades, cinema projection-layer structs and settings | pure test; headset-unverified |
 | Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | host render with synthetic retained list; real game/device/worn unverified |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
+| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | built + packaged; ABI checked; device/worn unverified |
 
 ## 10. Scripted cameras and the stereo cinema
 
@@ -189,7 +190,9 @@ For unattended integration checks use `force_render = true`, `diag_cinema_second
 `dump_frame = 120`, and `timing = true`. The forced route still respects `force_mono`, never changes
 simulation or loads a level, and leaves act select alone. The ordinary New Game intro exercises real
 classification. `vr-state.txt` includes `mode cinema`, latch/request details, cutscene/mode/shot/timer,
-screen pose/size and both submitted eye poses/FOVs, alongside the virtual game eyes. `[vr-perf]` names
+screen pose/size and both submitted eye poses/FOVs, alongside the virtual game eyes. Cinema reports
+virtual eye spacing in game units and runtime IPD in metres; it never converts that spacing through
+gameplay `world_scale`. `[vr-perf]` names
 cinema separately from mono and stereo. Eye dumps are the square storage images; resize them to 16:9
 to inspect the picture as seen on the screen.
 
@@ -277,11 +280,34 @@ anchor persistence/recentre; settings save/load/clamp; and an intro-classified f
 views match the screen and each runtime eye. Existing rig/maths/composition/settings checks run too.
 The pure suite has 945 checks. An additional Mesa 4.5 offscreen host check calls the actual
 `vr_render_frame` with a synthetic retained-list producer, then reads its GL eye/HUD targets outside
-the frame: 106 additional checks cover distinct stereo eye images, opaque black text-band margins,
-matching interpolated sky/world FOV, cinema holds/gaps, black mono/warp eye pixels, act-select routing,
+the frame: 110 additional checks cover distinct stereo eye images, opaque black text-band margins,
+matching interpolated sky/world FOV, cinema holds/gaps, black mono/warp eye pixels, act-select routing
+(including a conflicting gameplay flag and stale cutscene id),
 the immersive setting, diagnostic activation/expiry and acquisition failure. It is a **host renderer
 check, not a real SM64 scene, device run or worn acceptance**. Strict host compilation exposed a
 pre-existing dump-path truncation warning; the dump slot now has room for the directory and filename.
 The checkout lacks the
 `tests/vr/Makefile` and `tools/verify_flat_build_unchanged.sh` referred to by the generic Docker wrapper;
 use the bounded runner above and the recorded direct flat build check for this lane.
+
+The direct flat build uses the same image and default build options:
+
+```sh
+docker run --rm -v "$PWD":/src -w /src sm64-vr-linux \
+  bash -c 'make VR=0 -j4 && test -x build/us_pc/sm64coopdx'
+```
+
+The 2026-10-06 lane validation also passed `tools/docker/build-linux.sh on`, `package` and `abi`
+inside `sm64-vr-linux`: the executable is ELF AArch64 and its maximum required glibc is 2.34,
+below the 2.35 release floor (GLIBCXX 3.4.29). The staged package is
+`build/package/SM64VR`; all 416 file hashes in `BUILD-METADATA.json` were checked against the files,
+and its executable matched the built executable. The final package records the branch revision by
+mounting the repository's common Git directory read-only; this changes no repository or build scripts.
+
+The build reused only three large unchanged data objects (`custom_font`, `custom_textures`,
+`sound_data`) from the existing main-clone cache after hashing all of their listed dependencies:
+76, 82 and 8 matching entries respectively. Their complete VR-on and VR-off preprocessed tokens
+were then compared byte for byte before using them for the flat link. All other flat objects are
+compiled afresh. Independently, both modified non-VR translation units (`camera.c` and `gfx_pc.c`)
+have identical VR-off preprocessed tokens to the lane base `6e663516e`, with source filenames
+normalised. These checks establish flag-off source identity; no flat game was played.

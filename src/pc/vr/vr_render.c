@@ -449,8 +449,12 @@ static void dump_state_log(const vr_layers_t *layers) {
         for (int i = 0; i < 3; i++) {
             d[i] = vrr.eye_ctx[1].eye.position[i] - vrr.eye_ctx[0].eye.position[i];
         }
-        fprintf(f, "eye separation %.3f game units (%.4f m)\n", sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]),
-            sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) / st->rig.world_scale);
+        float separation = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (vrr.stage.mode == VR_MODE_CINEMA) {
+            fprintf(f, "virtual eye separation %.3f game units (runtime IPD %.4f m)\n", separation, vrr.eye_ctx[0].ipd);
+        } else {
+            fprintf(f, "eye separation %.3f game units (%.4f m)\n", separation, separation / st->rig.world_scale);
+        }
         fprintf(f, "hud pos=%.4f,%.4f,%.4f quat=%.5f,%.5f,%.5f,%.5f size=%.4fx%.4f m tris=%u visible=%d\n",
             layers->hud_pose.position[0], layers->hud_pose.position[1], layers->hud_pose.position[2],
             layers->hud_pose.orientation[0], layers->hud_pose.orientation[1], layers->hud_pose.orientation[2],
@@ -779,7 +783,7 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         vrr.holding = hold;
         vr_logf("render: %s", hold ? "holding behind a closed transition" : "transition hold released");
     }
-    bool want_cinema = (vrr.diag_cinema_active && diag_scene) || (vrr.st.cutscenes == 0 && gVrTick.gameplay_camera
+    bool want_cinema = (vrr.diag_cinema_active && diag_scene) || (vrr.st.cutscenes == 0 && gVrTick.gameplay_camera && !gVrTick.star_select
         && !gVrTick.in_main_menu && vr_cinema_cutscene(gVrTick.cutscene));
     bool cinema = vr_cinema_latch(&vrr.cinema_latch, want_cinema && world, hold, vrr.now_ns) && world;
     // A real menu leaves cinema immediately. Hysteresis applies to scripted

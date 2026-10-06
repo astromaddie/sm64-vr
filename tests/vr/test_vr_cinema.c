@@ -537,6 +537,13 @@ static void test_renderer_routing_and_images(void) {
     layers = render_at(5 * SEC);
     CHECK_INT(vr_render_info()->mode, VR_MODE_STEREO);
     CHECK(layers.projection && !layers.panel);
+    // Act select wins even if a mod/stale tick also marks a gameplay camera
+    // while the previous scripted-camera id is still present.
+    gVrTick.gameplay_camera = true;
+    layers = render_at(5 * SEC + 700000000);
+    CHECK_INT(vr_render_info()->mode, VR_MODE_STEREO);
+    CHECK(layers.projection && !layers.panel);
+    CHECK_NEAR(layers.fade_alpha, 0, 0);
     gVrTick.star_select = false;
     gVrTick.gameplay_camera = true;
     gVrTick.in_main_menu = true;
