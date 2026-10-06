@@ -117,7 +117,7 @@ float vr_game_cam_heading(const vr_game_cam_t *cam) {
         bx = -cam->up[0] * s;
         bz = -cam->up[2] * s;
     }
-    return atan2f(bx, bz);
+    return (float)atan2(bx, bz);
 }
 
 // The game camera for axes and a position: the view's rows are the axes
@@ -185,7 +185,7 @@ void vr_third_person_origin(const float eye[3], const float at[3], float lower, 
 
 static float line_pitch(const float from[3], const float to[3]) {
     float dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
-    return atan2f(dy, sqrtf(dx * dx + dz * dz));
+    return (float)atan2(dy, sqrt(dx * dx + dz * dz));
 }
 
 void vr_game_cam_third_person(const vr_game_cam_t *cam, const float at[3], float lower, float closer,

@@ -1,3 +1,5 @@
+// The render test checks the game's own atan2f against libc's on purpose
+#define VR_ALLOW_ATAN2F 1
 // The production cinema maths, classification/latch, stage transitions and
 // OpenXR layer builder. No graphics context or runtime is required.
 #include <math.h>

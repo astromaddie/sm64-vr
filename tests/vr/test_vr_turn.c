@@ -140,7 +140,7 @@ static void test_take(void) {
 
 // SM64: atan2s(z, x) is the yaw of (x, z); sins/coss
 static float sm64_yaw(float x, float z) {
-	return atan2f(x, z);
+	return (float)atan2(x, z);
 }
 
 static void test_angles(void) {
@@ -187,7 +187,7 @@ static int16_t intended_yaw(int stick_x, int stick_y, int16_t camera_yaw, float 
 static float heading_of_yaw(int16_t yaw) {
 	float a = vr_turn_s16_angle(yaw);
 	float x = sinf(a), z = cosf(a);
-	return atan2f(-x, -z);
+	return (float)atan2(-x, -z);
 }
 
 static void test_stick_frame(void) {

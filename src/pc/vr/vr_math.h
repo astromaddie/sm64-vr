@@ -67,4 +67,13 @@ void vr_hud_pose(const vr_pose_t *head, float distance, vr_pose_t *out);
 // wide (40 degrees at 100%), `aspect` = width / height.
 void vr_hud_size(float distance, float scale_percent, float aspect, float *width, float *height);
 
+// The game links its own atan2f (src/engine/math_util.c: SM64's argument
+// convention and a 16-bit table), so in the game binary every atan2f call in VR
+// code resolves to it, while host tests get libc's: the cinema frustum came out
+// 9:16 on the device only. Use (float)atan2 instead; this makes atan2f an error.
+#if defined(__GNUC__) && !defined(VR_ALLOW_ATAN2F)
+#include <math.h>
+#pragma GCC poison atan2f
+#endif
+
 #endif
