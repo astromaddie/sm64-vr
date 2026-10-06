@@ -142,6 +142,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | host render with synthetic retained list; real game/device/worn unverified |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
 | Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | built + packaged; ABI checked; device/worn unverified |
+| VR-disabled flat build and source identity of modified shared translation units | linked AArch64 executable; VR-off tokens identical to lane base; flat game not played |
 
 ## 10. Scripted cameras and the stereo cinema
 
@@ -294,14 +295,18 @@ The direct flat build uses the same image and default build options:
 
 ```sh
 docker run --rm -v "$PWD":/src -w /src sm64-vr-linux \
-  bash -c 'make VR=0 -j4 && test -x build/us_pc/sm64coopdx'
+  bash -c 'make VR=0 -j4 && test -x build/us_pc/sm64coopdx.arm'
 ```
+
+This ARM image's regular flat target has the `.arm` suffix; the VR target is unsuffixed.
 
 The 2026-10-06 lane validation also passed `tools/docker/build-linux.sh on`, `package` and `abi`
 inside `sm64-vr-linux`: the executable is ELF AArch64 and its maximum required glibc is 2.34,
 below the 2.35 release floor (GLIBCXX 3.4.29). The staged package is
 `build/package/SM64VR`; all 416 file hashes in `BUILD-METADATA.json` were checked against the files,
-and its executable matched the built executable. The final package records the branch revision by
+and its executable matched the built executable. The package records source revision
+`44af5ee1c3fbe4e6f99a8c2a70c4524290e04912` (clean), with executable SHA256
+`cc0f9f4bf3b3bba7ce55ae2ff038f6a79fd7691c6b2e823c489820293a2927c3`, by
 mounting the repository's common Git directory read-only; this changes no repository or build scripts.
 
 The build reused only three large unchanged data objects (`custom_font`, `custom_textures`,
@@ -311,3 +316,6 @@ were then compared byte for byte before using them for the flat link. All other 
 compiled afresh. Independently, both modified non-VR translation units (`camera.c` and `gfx_pc.c`)
 have identical VR-off preprocessed tokens to the lane base `6e663516e`, with source filenames
 normalised. These checks establish flag-off source identity; no flat game was played.
+The full `make VR=0 -j4` link also completed successfully: `build/us_pc/sm64coopdx.arm` is ELF
+AArch64, contains no `vr_` or `sfvr_` function symbols, and has SHA256
+`10a0447ddc8f533a7d4ef49f32fe13cffb154741d3159771376fa01bd1f21828`.
