@@ -133,3 +133,59 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | fov_mode 3 (the Frame's measured full fov) | headset-unverified |
 | Frame controller input, snap or smooth turning, haptics | headset-unverified |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |
+| In-headset VR settings page: tab table, value mapping (world scale as Mario's height), registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
+| Runtime settings API: set with clamping, reset, save, reload, environment overrides never written back | pure test (`tests/vr/test_vr_settings.c`) |
+| Live apply of a changed setting to the renderer (`vr_render_apply_settings`) | built, not run |
+| The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | built (arm64 package and ABI check), not rendered, not run |
+| The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | built, not run |
+
+## 10. VR settings page
+
+The pause menu has a "VR settings" button while a VR session is running (the flat build has no such
+button). It opens a list of tabs, each a DJUI panel built like coopdx's own option panels (checkboxes,
+selection boxes, sliders, buttons), in the standard's order: Comfort, Controls, HUD & menus, Display &
+performance, Accessibility & audio (no entries yet, so it is not listed), Room. Every tab ends with
+"Defaults" (resets that tab's keys) and "Back". Diagnostics never appear.
+
+- **Content.** `src/pc/vr/vr_menu.c` is a table of entries: key, label, tab, widget (toggle, choice,
+  slider, button), choice labels and values, slider range and step, display unit. An entry whose key is
+  not in the registry is left out, and so is a tab left empty, so keys added by other features show up
+  with no change here. The cinema and comfort keys are in the table already (`cutscenes`,
+  `cinema_distance`, `cinema_width`, `camera_closer`, `camera_lower`). `src/pc/djui/djui_panel_vr.c`
+  builds the panels from it; `djui_slider.c` has a small `SM64_VR` hook to show a unit instead of the
+  step number. World scale is shown as Mario's height in metres (161 / `world_scale`, 0.25 to 3.0 m).
+  Resolution is read when the swapchains are made, so its label says "(restart)"; the refresh rate
+  label says "SteamVR wins" (section 3). Sliders use whole steps (at most about 60 stops), because
+  DJUI's pad control moves a slider one step per tick.
+- **Applying and saving.** `vr_setting_set()` (`vr.h`) clamps with the registry's rules, rebuilds the
+  renderer's settings and hands them to `vr_render_apply_settings()`, so the next XR frame uses them.
+  Input reads `haptics` every frame already; other code that caches a key can poll
+  `vr_settings_revision()`. The file is written once the page has been quiet for 0.5 s, when a panel
+  closes and at shutdown, atomically (temp file, fsync, rename). A key set from the page leaves the
+  environment override behind; an override nobody changed is not written back.
+- **Where it is drawn.** In gameplay the pause menu is part of the 2D segment, so it is on the HUD quad:
+  1280 x 720 px over 40 degrees at `hud_scale` 100, 32 px a degree, so DJUI's 32 px text is 1 degree
+  tall (cap height about 0.7 degree, over the 0.6 degree the standard asks for; at `hud_scale` below
+  about 85 it drops under). The panel is 640 px, about 20 degrees wide. On the mono panel (2.2 m wide at
+  2 m, about 22 px a degree) the text is 1.4 degrees. The HUD quad used to follow the head; while a menu is
+  up it is now held where the head looked when the menu opened (until a recentre), as the standard asks
+  for menus. The quad also stays on while a menu is up with `hud_visible` off, or the page that turns it
+  on could not be seen.
+- **Pad navigation.** The same path as a gamepad in flat coopdx: D-pad or stick moves between entries, A
+  changes a toggle or choice or picks up a slider (then stick left and right), B goes back. Buttons are 2
+  degrees tall (the standard's 2.5 to 3 degree target is for the laser).
+- **Paused.** The pause menu does not stop the game loop in SM64: each XR frame still replays the newest
+  tick, and the scheduler keeps ticking, so the page redraws and reads input while the game is paused.
+  Nothing branches on pause in the VR loop (the DK64 lesson 99 case does not apply).
+- **Follow-up, not built.** DJUI's cursor takes its position from `mouse_window_x` / `mouse_window_y`
+  (`djui_cursor.c`) and the left button from the mouse buttons, so the laser pointer can drive it: intersect
+  the dominant hand's aim ray with the HUD quad (pose in `vr_render.c`), write the hit's pixel into those
+  and set the button on a trigger click.
+- **Wear checklist for the page.** (1) Pause: "VR settings" is in the pause menu, and the menu stays where it
+  opened when the head turns. (2) Read the smallest text of every tab (the value labels on the sliders); if
+  any is hard to read, say at which `hud_scale`. (3) Pad: D-pad and stick move, A toggles and picks up a slider,
+  B backs out, Start closes. (4) Haptics slider: the buzz of the next event changes. (5) World scale and
+  height offset: Mario and the view change as the slider moves, with the game still paused. (6) Turn the
+  HUD off from the page: the page stays; close the menu and the HUD is gone; turn it back on. (7) "Recentre
+  now" puts the menu and the view in front of the head. (8) Defaults on a tab restores that tab only.
+  (9) Quit and relaunch: the changed values are in `vr.toml` and in effect.

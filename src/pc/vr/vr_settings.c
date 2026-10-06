@@ -715,20 +715,42 @@ double vr_settings_get(const vr_settings_t *s, const char *name) {
 	return index >= 0 ? s->values[index] : 0.0;
 }
 
-void vr_settings_set(vr_settings_t *s, const char *name, double value) {
+double vr_settings_clamp(const char *name, double value) {
 	int index = vr_settings_index(name);
 	if (index < 0) {
-		return;
+		return value;
 	}
 	const sfvr_setting_key *k = vr_settings_key(index);
 	if (k->type == SFVR_SETTING_INT || k->type == SFVR_SETTING_ENUM) {
-		value = sfvr_settings_clamp_int(k, (int)floor(value + 0.5));
+		if (isnan(value)) {
+			return k->def;
+		}
+		value = floor(value + 0.5);
+		value = value > 2147483647.0 ? 2147483647.0 : (value < -2147483648.0 ? -2147483648.0 : value);
+		return sfvr_settings_clamp_int(k, (int)value);
 	}
-	else if (k->type == SFVR_SETTING_BOOL) {
-		value = value != 0;
+	if (k->type == SFVR_SETTING_BOOL) {
+		return value != 0;
 	}
-	else {
-		value = sfvr_settings_clamp_float(k, (float)value);
+	return sfvr_settings_clamp_float(k, (float)value);
+}
+
+bool vr_settings_set(vr_settings_t *s, const char *name, double value) {
+	int index = vr_settings_index(name);
+	if (index < 0) {
+		return false;
 	}
+	value = vr_settings_clamp(name, value);
+	bool changed = !same_value(s->values[index], value) || !same_value(s->file_values[index], value);
 	s->values[index] = s->file_values[index] = value;
+	return changed;
+}
+
+double vr_settings_default(const char *name) {
+	int index = vr_settings_index(name);
+	return index >= 0 ? vr_settings_key((size_t)index)->def : 0.0;
+}
+
+bool vr_settings_reset(vr_settings_t *s, const char *name) {
+	return vr_settings_set(s, name, vr_settings_default(name));
 }

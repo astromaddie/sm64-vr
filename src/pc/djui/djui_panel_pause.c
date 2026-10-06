@@ -15,6 +15,11 @@
 #include "game/object_helpers.h"
 #include "behavior_table.h"
 
+#ifdef SM64_VR
+#include "djui_panel_vr.h"
+#include "pc/vr/vr.h"
+#endif
+
 bool gDjuiPanelPauseCreated = false;
 
 static void djui_panel_pause_resume(UNUSED struct DjuiBase* caller) {
@@ -74,6 +79,13 @@ void djui_panel_pause_create(struct DjuiBase* caller) {
         } else {
             djui_button_create(body, DLANG(PAUSE, SERVER_SETTINGS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_client_server_settings_create);
         }
+
+#ifdef SM64_VR
+        // The in-headset settings page, only while a VR session is running
+        if (vr_enabled()) {
+            djui_button_create(body, "VR settings", DJUI_BUTTON_STYLE_NORMAL, djui_panel_vr_create);
+        }
+#endif
 
         struct Mod* addedMods[MAX_HOOKED_MOD_MENU_ELEMENTS] = { 0 };
         int modCount = 0;

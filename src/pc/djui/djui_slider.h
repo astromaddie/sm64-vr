@@ -12,6 +12,10 @@ struct DjuiSlider {
     unsigned int min;
     unsigned int max;
     bool updateRectValueColor;
+#ifdef SM64_VR
+    // Text for the value, instead of the number itself (the VR settings page shows units)
+    void (*format)(struct DjuiBase* base, unsigned int value, char* out, size_t size);
+#endif
 };
 
 struct DjuiSlider* djui_slider_create(struct DjuiBase* parent, const char* message, unsigned int* value, unsigned int min, unsigned int max, void (*on_value_change)(struct DjuiBase*));

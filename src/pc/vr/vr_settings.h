@@ -56,7 +56,17 @@ bool vr_settings_load(vr_settings_t *s, const char *path);
 bool vr_settings_save(const vr_settings_t *s);
 
 double vr_settings_get(const vr_settings_t *s, const char *name); // effective value; 0 for an unknown name
-void vr_settings_set(vr_settings_t *s, const char *name, double value); // clamps; sets effective and file value
+
+// Runtime changes (the in-headset page): the value is clamped with the registry's
+// rules, rounded for int and enum keys and made 0 or 1 for bool keys. set() sets
+// both the effective value and the file value, so an environment override ends
+// for that key and the value is what save() writes; it returns whether anything
+// changed (false too for an unknown name). The environment value of a key nobody
+// set is never written back.
+double vr_settings_clamp(const char *name, double value); // what set() would store; `value` for an unknown name
+bool vr_settings_set(vr_settings_t *s, const char *name, double value);
+double vr_settings_default(const char *name); // 0 for an unknown name
+bool vr_settings_reset(vr_settings_t *s, const char *name); // set() to the default
 
 void vr_settings_free(vr_settings_t *s);
 
