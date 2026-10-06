@@ -268,12 +268,12 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Star select in stereo, warp transitions with a fade quad | headset-unverified |
 | fov_mode 3 (the Frame's measured full fov) | headset-unverified |
 | Frame controller input, haptics | headset-unverified |
-| Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | pure test |
+| Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | verified unattended 2026-10-06 (Castle Grounds, `diag_turn_stick = 1`: a 30 degree snap stepped the shown heading 90 to 120 in one frame and the game camera arrived the next tick, no swing; at 120 Hz, 0 missed). Afterwards Lakitu drifted back about 8 degrees over a few seconds with Mario idle, and the view followed (vanilla). Not worn |
 | Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
 | `world_scale` 20 to 400, `camera_closer`, `camera_lower`, `height_offset` (rig maths, contract, IPD, default bit parity) | pure test |
 | Recentre keeps the standing height; View held 3 s, focus and `seated` take it | pure test |
 | Vignette on artificial rotation (ramp), `camera_shake` off | pure test (ramp); drawing and the shake hook unrun |
-| `[vr-cam]` logs and `diag_turn_stick` | built, unrun |
+| `[vr-cam]` logs and `diag_turn_stick` | verified unattended 2026-10-06 |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |
 | In-headset VR settings page: tab table, value mapping (world scale as Mario's height), registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
 | Runtime settings API: set with clamping, reset, save, reload, environment overrides never written back | pure test (`tests/vr/test_vr_settings.c`) |
@@ -281,9 +281,9 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | built (arm64 package and ABI check), not rendered, not run |
 | The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | built, not run |
 | Cinema screen corners, positive parallax, display-time latch, stage fades, cinema projection-layer structs and settings | pure test; headset-unverified |
-| Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | host render with synthetic retained list; real game/device/worn unverified |
+| Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | verified unattended 2026-10-06 for the eye replay (`diag_cinema_seconds = 10` on the menu background: mode cinema, screen 3.0 m, 3.6 x 2.0 m, both eyes letterboxed with everything behind the screen; 120 fps). Text band and real cutscene classification: device-unverified; not worn |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
-| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | built + packaged; ABI checked; device/worn unverified |
+| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | deployed and run on the Frame 2026-10-06 (merged main 38072d349) |
 | VR-disabled flat build and source identity of modified shared translation units | linked AArch64 executable; VR-off tokens identical to lane base; flat game not played |
 
 ## 10. VR settings page
