@@ -321,7 +321,13 @@ void patch_mtx_interpolated(f32 delta) {
         if (gOverrideFar == 0 && configDrawDistance == 6) { far = max(far, MAX_FAR_PLANE_DIST); }
 
         guPerspective(sPerspectiveMtx, &perspNorm, fovInterpolated, sPerspectiveAspect, near, far, 1.0f);
+#ifdef SM64_VR
+        // The retained eye replay needs the interpolated matrix, not the
+        // GraphNodePerspective's fields reinterpreted as matrix floats.
+        gSPMatrix(sPerspectivePos, VIRTUAL_TO_PHYSICAL(sPerspectiveMtx), G_MTX_PROJECTION | G_MTX_LOAD | G_MTX_NOPUSH);
+#else
         gSPMatrix(sPerspectivePos, VIRTUAL_TO_PHYSICAL(sPerspectiveNode), G_MTX_PROJECTION | G_MTX_LOAD | G_MTX_NOPUSH);
+#endif
     }
 
     if (sViewportClipPos != NULL) {

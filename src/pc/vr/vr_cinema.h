@@ -93,6 +93,8 @@ void vr_cinema_band(const vr_cinema_screen_t *screen, vr_pose_t *pose, float *wi
 // everything surviving clipping lies behind the screen. Infinity disparity
 // on the screen is at most 60% of the runtime IPD, avoiding divergent eyes.
 // No tracked head heading, comfort turn offset or world_scale enters this rig.
+// Preserves the interpolated vertical FOV/lens centre and depth mapping while
+// adapting horizontal scale to the fixed 16:9 picture, regardless of source aspect.
 bool vr_cinema_game_eye(const vr_game_cam_t *cam, const float game_proj[16],
     float ipd, float screen_width, int eye, vr_eye_cam_t *out, float fov[4], float projection[16]);
 // `projection` may be NULL. Otherwise it is the Fast3D replacement projection:

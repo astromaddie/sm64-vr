@@ -50,6 +50,9 @@ static const sfvr_setting_key port_keys[] = {
 	// Starts on the first available world camera (including the main-menu
 	// background), using predicted display time. 0 disables the diagnostic.
 	{ "diag_cinema_seconds", SFVR_SETTING_FLOAT, 0.0, 0.0, 120.0, NULL },
+	// One real boss-mode dialog after 30 settled gameplay ticks, using Mario
+	// as the focus and the authored King Whomp text. Config/env only; 0 = off.
+	{ "diag_dialog_cutscene_seconds", SFVR_SETTING_FLOAT, 0.0, 0.0, 120.0, NULL },
 	// An inverted view fov from the runtime (vr_xr.h): 0 = as given,
 	// 1 = negate all four angles, 2 = swap left/right and up/down,
 	// 3 = always the Frame's full fov measured by the earlier ports (default;

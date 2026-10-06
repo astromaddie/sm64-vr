@@ -16,8 +16,10 @@ for name in cinema cam math compose settings; do
     "$test_binary"
 done
 cc "${test_flags[@]}" -Wno-missing-field-initializers -DVR_CINEMA_RENDER_TEST \
-    -DVERSION_US=1 -DF3DEX_GBI_2E=1 -DF3DEX_GBI_SHARED=1 -D_LANGUAGE_C \
-    -Iinclude -Isrc -I. tests/vr/test_vr_cinema.c \
+    -DNON_MATCHING=1 -DAVOID_UB=1 -DVERSION_US=1 -DF3DEX_GBI_2E=1 -DF3DEX_GBI_SHARED=1 -D_LANGUAGE_C \
+    -Iinclude -Isrc -I. -Ilib/lua/include tests/vr/test_vr_cinema.c \
+    tests/vr/cinema_game_path.c src/engine/math_util.c src/pc/utils/misc.c \
+    lib/src/guPerspectiveF.c lib/src/guMtxF2L.c \
     src/pc/vr/vr_render.c src/pc/vr/vr_game.c "${test_sources[@]}" \
     -Wl,--gc-sections -o "$test_binary" -lm -lGL -lSDL2
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 "$test_binary"

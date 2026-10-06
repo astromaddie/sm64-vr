@@ -46,6 +46,7 @@ enum GfxVrPassKind {
 struct GfxVrPass {
     enum GfxVrPassKind kind;
     uint32_t width, height; // the target; viewports and scissors scale to it
+    bool cinema; // EYE: the world fills the fixed 16:9 picture, independent of game viewport overrides
     // EYE: turns the game's world projection (a perspective, Mat4 memory) into
     // the eye's replacement. Called once per world projection load.
     void (*world_proj)(const float game_proj[16], float out[16], void *user);
