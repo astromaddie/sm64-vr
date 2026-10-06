@@ -14,11 +14,26 @@
 #include "vr_log.h"
 #include "vr_paths.h"
 
+static const char *const third_person_move_values[] = { "face_move", NULL };
+
 // Keys that only this port has. The standard keys live in the sfvr registry.
 static const sfvr_setting_key port_keys[] = {
 	// Game units per metre. Mario is 161 units tall; at 104 he is 1.55 m, life
-	// size (docs/VR_ARCHITECTURE.md section 4). Smaller values make a diorama.
-	{ "world_scale", SFVR_SETTING_FLOAT, 104.0, 10.0, 2000.0, NULL },
+	// size (docs/VR_ARCHITECTURE.md section 4). Larger values make a diorama
+	// (400: Mario 0.4 m), smaller ones a giant's world (20: Mario 8 m). Live.
+	{ "world_scale", SFVR_SETTING_FLOAT, 104.0, 20.0, 400.0, NULL },
+	// The third-person head origin (after DK64): closer moves it along the line
+	// from the game camera to its look-at point (0..0.8 of the way), lower then
+	// moves the height left toward the look-at point's (0..1). Live.
+	{ "camera_closer", SFVR_SETTING_FLOAT, 0.0, 0.0, 0.8, NULL },
+	{ "camera_lower", SFVR_SETTING_FLOAT, 0.0, 0.0, 1.0, NULL },
+	// standard.md section 5: Mario turns to walk where the stick points,
+	// relative to the view. SM64 has no aiming, so face_camera does not apply.
+	{ "third_person_move", SFVR_SETTING_ENUM, 0.0, 0.0, 0.0, third_person_move_values },
+	// Diagnostic: right stick X held at this deflection for 4 s, released for
+	// 4 s, in stereo play (a snap a hold, or the smooth turn), with [vr-cam]
+	// lines of the shown and the game camera's heading. 0 = off.
+	{ "diag_turn_stick", SFVR_SETTING_FLOAT, 0.0, -1.0, 1.0, NULL },
 	// The anchor drops the game camera's pitch: looking level in the headset is
 	// level in the game, and the head supplies pitch.
 	{ "level_pitch", SFVR_SETTING_BOOL, 1.0, 0.0, 1.0, NULL },

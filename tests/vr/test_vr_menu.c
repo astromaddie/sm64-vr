@@ -128,7 +128,8 @@ static void test_value_mapping_round_trips(void) {
 			CHECK(count >= 2 && count <= 80);
 			for (int stop = 0; stop < count; stop++) {
 				double v = vr_menu_slider_value(e, stop);
-				CHECK(v >= k->min - 1e-9 && v <= k->max + 1e-9);
+				// Float keys hold float precision: 0.8 comes back as 0.80000001
+				CHECK(v >= k->min - 1e-6 && v <= k->max + 1e-6);
 				CHECK_INT(vr_menu_slider_stop(e, v), stop);
 				if (k->type == SFVR_SETTING_INT) {
 					CHECK_NEAR(v, floor(v + 0.5), 1e-9);
@@ -191,7 +192,7 @@ static void test_sliders(void) {
 	CHECK_STR(text, "1.55 m");
 	CHECK_NEAR(vr_menu_slider_value(world, stop), 161.0 / 1.55, 1e-4); // stored as a float
 	CHECK_NEAR(vr_menu_slider_value(world, vr_menu_slider_stop(world, 161.0)), 161.0, 1e-9); // 1.00 m
-	CHECK_NEAR(vr_menu_slider_display(world, 0), 0.25, 1e-9);
+	CHECK_NEAR(vr_menu_slider_display(world, 0), 0.45, 1e-9);
 	CHECK(vr_menu_slider_value(world, 0) > vr_menu_slider_value(world, 10)); // taller Mario, smaller scale
 	int last = vr_menu_slider_count(world) - 1;
 	CHECK_NEAR(vr_menu_slider_display(world, last), 3.0, 1e-9);

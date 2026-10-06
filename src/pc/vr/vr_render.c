@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,10 +14,13 @@
 #include "stb/stb_image_write.h"
 
 #include "vr_render.h"
+#include "vr.h"
 #include "vr_cam.h"
 #include "vr_game.h"
+#include "vr_input.h"
 #include "vr_log.h"
 #include "vr_math.h"
+#include "vr_turn.h"
 #include "pc/gfx/gfx_vr.h"
 
 // The pause menu (and the VR settings page under it) is drawn on the HUD quad
@@ -98,6 +102,25 @@ static struct {
     vr_render_timing_t timing;
     vr_render_info_t info;
 
+    // Comfort (docs/VR_ARCHITECTURE.md section 4): the keys, read live every frame
+    vr_comfort_t comfort;
+    vr_turn_t turn;
+    vr_game_cam_t shown_cam; // the game camera as shown: turned by the queued turn, closer, lower
+    vr_heading_t game_heading, shown_heading; // unwrapped, radians
+    float shown_prev, game_prev; // last frame's headings (unwrapped)
+    bool shown_prev_valid;
+    float shown_rate, game_rate; // deg/s, jumps excluded
+    float vignette; // 0..vignette_strength
+    int64_t last_ns;
+    unsigned int turn_updates_seen; // gVrCamTurn.updates at the last change
+    double turn_updates_s; // display time of that change
+    unsigned int turn_refused_seen;
+    double cam_log_s, diag_log_s, limit_log_s;
+    int snap_trace; // display frames left of a diag_turn_stick snap trace
+    bool play; // stereo gameplay through the game camera: turning, closer/lower and the stick frame apply
+    GLuint vignette_program;
+    GLint vignette_tan_loc, vignette_amount_loc, vignette_size_loc;
+
     // GPU time of the eye and HUD passes (timing on): timestamp pairs in a ring,
     // read back a few frames later so nothing waits (lesson 10, lesson 53)
     GLuint gpu_query[VR_GPU_RING][2];
@@ -161,6 +184,10 @@ void vr_render_request_recentre(void) {
     vr_stage_request_recentre(&vrr.stage);
 }
 
+void vr_render_request_height(void) {
+    vr_stage_request_height(&vrr.stage);
+}
+
 
 // -----------------------------------------------------------------------------
 // GL objects
@@ -190,6 +217,24 @@ static const char *const RESOLVE_FS =
     "    float a = clamp(1.0 - dot(w - k, vec3(1.0 / 3.0)), 0.0, 1.0);\n"
     "    vec3 c = a > 0.002 ? clamp(k / a, 0.0, 1.0) : vec3(0.0);\n"
     "    frag_color = cinema_band ? vec4(k, 1.0) : vec4(c, a);\n"
+    "}\n";
+
+// The comfort vignette (vignette, vignette_strength): black outside a cone
+// about the eye's own axis, so each eye centres on itself. `tans` are the
+// eye's fov tangents (left, right, up, down); the clear cone's half-angle goes
+// from 60 degrees at amount 0 to 22 at amount 1, with a 12 degree edge.
+static const char *const VIGNETTE_FS =
+    "#version 330 core\n"
+    "uniform vec4 tans;\n"
+    "uniform vec2 size;\n"
+    "uniform float amount;\n"
+    "out vec4 frag_color;\n"
+    "void main(void) {\n"
+    "    vec2 uv = gl_FragCoord.xy / size;\n"
+    "    vec2 t = vec2(mix(tans.x, tans.y, uv.x), mix(tans.w, tans.z, uv.y));\n"
+    "    float angle = atan(length(t));\n"
+    "    float clear = radians(mix(60.0, 22.0, amount));\n"
+    "    frag_color = vec4(0.0, 0.0, 0.0, smoothstep(clear, clear + radians(12.0), angle));\n"
     "}\n";
 
 static GLuint compile(GLenum type, const char *src) {
@@ -230,6 +275,23 @@ static void gl_make(void) {
     glUniform1i(glGetUniformLocation(vrr.resolve_program, "over_white"), 3);
     glUseProgram(0);
     glGenVertexArrays(1, &vrr.resolve_vao);
+
+    GLuint vvs = compile(GL_VERTEX_SHADER, RESOLVE_VS);
+    GLuint vfs = compile(GL_FRAGMENT_SHADER, VIGNETTE_FS);
+    vrr.vignette_program = glCreateProgram();
+    glAttachShader(vrr.vignette_program, vvs);
+    glAttachShader(vrr.vignette_program, vfs);
+    glLinkProgram(vrr.vignette_program);
+    ok = 0;
+    glGetProgramiv(vrr.vignette_program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        vr_logf("render: the vignette program did not link");
+        vrr.vignette_program = 0;
+    } else {
+        vrr.vignette_tan_loc = glGetUniformLocation(vrr.vignette_program, "tans");
+        vrr.vignette_size_loc = glGetUniformLocation(vrr.vignette_program, "size");
+        vrr.vignette_amount_loc = glGetUniformLocation(vrr.vignette_program, "amount");
+    }
     glBindVertexArray((GLuint)vrr.game_vao);
     vrr.gl_ready = true;
     vr_logf("render: GL %s, game VAO %d VBO %d", (const char *)glGetString(GL_VERSION), vrr.game_vao, vrr.game_vbo);
@@ -420,6 +482,12 @@ static void dump_state_log(const vr_layers_t *layers) {
     fprintf(f, "settings world_scale=%.3f head_translation=%.3f level_pitch=%d hud_distance=%.3f hud_scale=%.1f force_mono=%d diag_menu_stereo=%d diag_yaw_deg=%.2f\n",
         st->rig.world_scale, st->rig.head_translation, st->rig.level_pitch, st->hud_distance, st->hud_scale,
         st->force_mono, st->diag_menu_stereo, st->diag_yaw * 180.0 / M_PI);
+    fprintf(f, "comfort turn_mode=%d snap=%.0f smooth=%.0f queued_deg=%.2f shown_deg=%.2f game_deg=%.2f play=%d "
+        "closer=%.2f lower=%.2f height_offset=%.2f seated=%d vignette=%.2f camera_shake=%d move_relative=%d move_yaw_deg=%.2f\n",
+        (int)vrr.comfort.turn.mode, vrr.comfort.turn.snap_angle_deg, vrr.comfort.turn.smooth_speed_dps,
+        gVrCamTurn.queued * 180.0 / M_PI, vrr.shown_heading.unwrapped * 180.0 / M_PI, vrr.game_heading.unwrapped * 180.0 / M_PI,
+        vrr.play, vrr.comfort.camera_closer, vrr.comfort.camera_lower, vrr.comfort.height_offset, vrr.comfort.seated,
+        vrr.vignette, vrr.comfort.camera_shake, vrr.comfort.move_relative, gVrCamTurn.move_yaw * 180.0 / M_PI);
     fprintf(f, "tick rendered_area=%d gameplay_camera=%d in_main_menu=%d transition=%d interp_cam=%d\n",
         gVrTick.rendered_area, gVrTick.gameplay_camera, gVrTick.in_main_menu, gVrTick.transition, gVrInterpCamValid);
     fprintf(f, "recentre yaw=%.5f origin=%.4f,%.4f,%.4f applied=%u switches=%u\n",
@@ -501,6 +569,29 @@ static void world_proj(const float game_proj[16], float out[16], void *user) {
     vr_eye_world_proj(&c->cam, &c->eye, c->fov, n, f, out);
 }
 
+// Over the eye image just drawn (bound), only while the vignette shows
+static void draw_vignette(const float fov[4], uint32_t w, uint32_t h, float amount) {
+    if (!vrr.vignette_program) {
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+    glUseProgram(vrr.vignette_program);
+    glUniform4f(vrr.vignette_tan_loc, tanf(fov[0]), tanf(fov[1]), tanf(fov[2]), tanf(fov[3]));
+    glUniform2f(vrr.vignette_size_loc, (float)w, (float)h);
+    glUniform1f(vrr.vignette_amount_loc, amount);
+    glBindVertexArray(vrr.resolve_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glUseProgram(0);
+    gl_restore();
+    glDepthMask(GL_TRUE);
+}
+
 static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
     bool ok = true;
     for (int e = 0; e < 2; e++) {
@@ -529,6 +620,9 @@ static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
         gfx_vr_run_pass(dl, &pass);
         vrr.info.tris_eye[e] = gfx_vr_pass_stats()->tris_drawn;
         vrr.info.world_proj_loads[e] = gfx_vr_pass_stats()->world_proj_loads;
+        if (vrr.vignette > 0.001f) {
+            draw_vignette(vrr.eye_ctx[e].fov, t.width, t.height, vrr.vignette);
+        }
 
         if (vrr.dump_this_frame) {
             dump_queue(e, e == 0 ? "vr-eye0.png" : "vr-eye1.png", t.image, t.width, t.height, 3);
@@ -662,6 +756,156 @@ static void replay_mono(Gfx *dl, vr_layers_t *layers) {
 // -----------------------------------------------------------------------------
 // The frame
 
+// -----------------------------------------------------------------------------
+// Comfort: turning, the shown camera, the stick's frame, the vignette
+// (docs/VR_ARCHITECTURE.md section 4; the protocol is in vr_turn.h)
+
+#define VR_RAD_DEG (180.0f / VR_TURN_PI)
+
+static void cam_logf(const char *fmt, ...) VR_PRINTF_LIKE(1, 2);
+static void cam_logf(const char *fmt, ...) {
+    char line[512];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+    printf("[vr-cam] %s\n", line);
+    fflush(stdout);
+}
+
+// The keys of the comfort set and the rig, live: the settings page may change them
+static void comfort_refresh(void) {
+    const vr_settings_t *settings = vr_settings();
+    if (settings == NULL) {
+        return;
+    }
+    vr_comfort_from(&vrr.comfort, settings);
+    vrr.st.rig.world_scale = vrr.comfort.world_scale;
+    vrr.st.rig.head_translation = vrr.comfort.head_translation;
+    vrr.st.rig.level_pitch = vrr.comfort.level_pitch;
+    vrr.st.rig.height_offset = vrr.comfort.height_offset;
+    vrr.stage.seated = vrr.comfort.seated;
+    gVrCamTurn.no_shake = !vrr.comfort.camera_shake;
+}
+
+// Once per frame, before the eyes: the stick's turn into the queue, then the
+// game camera as shown (turned about Mario by what is queued, then closer and
+// lower), the headings for the log and the vignette, and the stick's frame
+static void comfort_frame(bool stereo, bool hold, float dt) {
+    double now_s = (double)vrr.now_ns * 1e-9;
+    vrr.play = stereo && !hold && gVrTick.gameplay_camera && !gVrTick.star_select && !gVrTick.in_main_menu;
+
+    // The gate: the game camera can take a turn, and still updates (a pause
+    // or a cutscene that stops camera updates closes it)
+    if (gVrCamTurn.updates != vrr.turn_updates_seen) {
+        vrr.turn_updates_seen = gVrCamTurn.updates;
+        vrr.turn_updates_s = now_s;
+    }
+    double since_update = now_s - vrr.turn_updates_s;
+    if (gVrCamTurn.queued != 0.0f && since_update > 0.3) {
+        cam_logf("turn: %.1f deg queued, but the camera has not updated for %.2f s; dropped",
+            gVrCamTurn.queued * VR_RAD_DEG, since_update);
+        gVrCamTurn.queued = 0.0f;
+    }
+    if (gVrCamTurn.refused != vrr.turn_refused_seen) {
+        vrr.turn_refused_seen = gVrCamTurn.refused;
+        cam_logf("turn: a camera update could not take the queued turn (mode or state changed)");
+    }
+    vr_turn_gate_t gate = {
+        .open = vrr.play && since_update < 0.2 && gVrCamTurn.allowed,
+        .queued = gVrCamTurn.queued,
+        .limit_left = gVrCamTurn.limit_left,
+        .limit_right = gVrCamTurn.limit_right
+    };
+    const vr_gamepad_t *pad = vr_input_gamepad();
+    float stick = pad->live ? (float)pad->right_x / 32767.0f : 0.0f;
+    stick = vr_turn_diag_stick(&vrr.turn, vrr.comfort.diag_turn_stick, stick, now_s, vrr.play);
+    vr_turn_step_t step = vr_turn_frame(&vrr.turn, &vrr.comfort.turn, stick, dt, &gate);
+    if (step.delta != 0.0f) {
+        gVrCamTurn.queued += step.delta;
+    }
+    if (step.closed && vrr.play && now_s - vrr.limit_log_s > 2.0) {
+        vrr.limit_log_s = now_s;
+        cam_logf("turn: ignored: %s", gVrCamTurn.allowed ? "the camera has not updated lately"
+            : "this camera takes no turn (an authored, swimming, flying or C-up camera, a cutscene or pause)");
+    } else if (step.kind == VR_TURN_STEP_SNAP && !step.closed) {
+        if (step.delta != 0.0f) {
+            cam_logf("turn: snap %s %.0f deg%s (shown %.1f deg, game camera %.1f deg)", step.delta > 0.0f ? "left" : "right",
+                fabsf(step.delta) * VR_RAD_DEG, step.limited ? ", cut by the camera's limit" : "",
+                vrr.shown_heading.unwrapped * VR_RAD_DEG, vrr.game_heading.unwrapped * VR_RAD_DEG);
+            if (vrr.comfort.diag_turn_stick != 0.0f) {
+                vrr.snap_trace = 12;
+            }
+        } else if (now_s - vrr.limit_log_s > 2.0) {
+            vrr.limit_log_s = now_s;
+            cam_logf("turn: snap dropped: the camera can turn %.0f deg left, %.0f deg right from here",
+                gVrCamTurn.limit_left * VR_RAD_DEG, gVrCamTurn.limit_right * VR_RAD_DEG);
+        }
+    }
+
+    if (!stereo || hold) {
+        gVrCamTurn.move_active = false;
+        vrr.vignette = 0.0f;
+        vrr.shown_prev_valid = false;
+        return;
+    }
+
+    // The camera as shown
+    float orbit = vrr.play ? gVrCamTurn.queued : 0.0f;
+    vr_game_cam_orbit(&vrr.cam, gVrInterpPivot, orbit, &vrr.shown_cam);
+    if (vrr.play) {
+        float at[3] = { gVrInterpCamFocus[0], gVrInterpCamFocus[1], gVrInterpCamFocus[2] };
+        if (orbit != 0.0f) {
+            vr_turn_rotate_about(at, gVrInterpPivot, orbit);
+        }
+        vr_game_cam_third_person(&vrr.shown_cam, at, vrr.comfort.camera_lower, vrr.comfort.camera_closer, &vrr.shown_cam);
+    }
+
+    // Headings: the log, the vignette
+    float game = vr_heading_track(&vrr.game_heading, vr_game_cam_heading(&vrr.cam));
+    float shown = vr_heading_track(&vrr.shown_heading, vr_game_cam_heading(&vrr.shown_cam));
+    vrr.shown_rate = vrr.shown_prev_valid ? vr_heading_rate(vrr.shown_prev, shown, dt) : 0.0f;
+    vrr.game_rate = vrr.shown_prev_valid ? vr_heading_rate(vrr.game_prev, game, dt) : 0.0f;
+    vrr.shown_prev = shown;
+    vrr.game_prev = game;
+    vrr.shown_prev_valid = true;
+
+    float target = (vrr.comfort.vignette && vrr.play) ? vr_vignette_target(vrr.shown_rate, vrr.comfort.vignette_strength) : 0.0f;
+    vrr.vignette = vrr.comfort.vignette ? vr_vignette_step(vrr.vignette, target, vrr.comfort.vignette_strength, dt) : 0.0f;
+
+    // The stick's frame (mario.c): the head's or a hand's yaw from the view's forward
+    float hand_yaw[2] = { 0.0f, 0.0f };
+    bool hand_valid[2];
+    for (int h = 0; h < 2; h++) {
+        hand_valid[h] = vr_input_hand_yaw(h, &hand_yaw[h]);
+    }
+    gVrCamTurn.move_yaw = vr_move_reference(vrr.comfort.move_relative, vr_yaw_of(vrr.head.orientation),
+        hand_yaw, hand_valid, vrr.stage.recentre.yaw);
+    gVrCamTurn.move_active = vrr.play;
+
+    // [vr-cam]: the shown heading against the game camera's
+    if (vrr.snap_trace > 0) {
+        vrr.snap_trace--;
+        cam_logf("snap +%d frames: shown %.1f deg, game camera %.1f deg, queued %.1f deg", 12 - vrr.snap_trace,
+            shown * VR_RAD_DEG, game * VR_RAD_DEG, gVrCamTurn.queued * VR_RAD_DEG);
+    }
+    if (vrr.comfort.diag_turn_stick != 0.0f && vrr.play && now_s - vrr.diag_log_s >= 0.25) {
+        vrr.diag_log_s = now_s;
+        cam_logf("diag: stick %.2f, shown %.1f deg (%.1f deg/s), game camera %.1f deg (%.1f deg/s), queued %.1f deg, vignette %.2f",
+            stick, shown * VR_RAD_DEG, vrr.shown_rate, game * VR_RAD_DEG, vrr.game_rate, gVrCamTurn.queued * VR_RAD_DEG, vrr.vignette);
+    }
+    if (now_s - vrr.cam_log_s >= 10.0) {
+        vrr.cam_log_s = now_s;
+        cam_logf("shown %.1f deg, game camera %.1f deg, taken %.0f deg in all, gate %s (%.0f left, %.0f right), "
+            "world_scale %.0f, closer %.2f, lower %.2f, height %+.2f m%s, turn %s",
+            shown * VR_RAD_DEG, game * VR_RAD_DEG, gVrCamTurn.taken * VR_RAD_DEG, gate.open ? "open" : "closed",
+            fminf(gVrCamTurn.limit_left * VR_RAD_DEG, 999.0f), fminf(gVrCamTurn.limit_right * VR_RAD_DEG, 999.0f),
+            vrr.st.rig.world_scale, vrr.comfort.camera_closer, vrr.comfort.camera_lower, vrr.comfort.height_offset,
+            vrr.comfort.seated ? " seated" : "",
+            vrr.comfort.turn.mode == SFVR_TURN_SNAP ? "snap" : (vrr.comfort.turn.mode == SFVR_TURN_SMOOTH ? "smooth" : "off"));
+    }
+}
+
 // Why a frame cannot be stereo; NULL when it can
 static const char *mono_reason(void) {
     if (!vrr.views_ok) {
@@ -694,6 +938,8 @@ void vr_render_init(const vr_render_settings_t *settings, const vr_provider_t *p
     vrr.ready = true;
     vrr.last_synthetic = -1;
     vrr.info.mono_reason = "";
+    vr_turn_reset(&vrr.turn);
+    memset(&gVrCamTurn, 0, sizeof(gVrCamTurn));
     vr_logf("render: 2D layout %dx%d, world_scale %.1f units/m, level_pitch %d, hud %.2f m at %.0f%%, panel %.2f m x %.2f m",
         settings->ui_width, settings->ui_height, settings->rig.world_scale, settings->rig.level_pitch,
         settings->hud_distance, settings->hud_scale, settings->panel_distance, settings->panel_width);
@@ -736,8 +982,12 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         gl_make();
     }
 
+    float dt = vrr.last_ns != 0 ? (float)((double)(frame->predicted_display_time - vrr.last_ns) * 1e-9) : 0.0f;
+    dt = dt < 0.0f ? 0.0f : (dt > 0.1f ? 0.1f : dt);
+    vrr.last_ns = frame->predicted_display_time;
     vrr.now_ns = frame->predicted_display_time;
     vrr.views_ok = frame->views_valid;
+    comfort_refresh();
     vr_view_t raw_views[2];
     memcpy(raw_views, frame->views, sizeof(raw_views));
     if (vrr.views_ok) {
@@ -767,7 +1017,7 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
             vr_logf("render: views now %s; recentring", frame->synthetic ? "synthetic (standby)" : "tracked");
         }
         vrr.last_synthetic = frame->synthetic;
-        vr_stage_request_recentre(&vrr.stage);
+        vr_stage_request_height(&vrr.stage);
     }
     memset(&vrr.timing, 0, sizeof(vrr.timing));
     vrr.timing.gpu_ms = -1.0f;
@@ -825,6 +1075,18 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         mkdirs(vrr.dump_dir);
     }
 
+    // Comfort turns and recentring belong to the live world view; the cinema
+    // anchors its screen on head yaw at entry and ignores the turn orbit
+    bool stereo = world && !cinema;
+    if (stereo && !hold) {
+        bool height = vrr.stage.height_pending || !vrr.stage.recentre_valid || vrr.stage.seated;
+        if (vr_stage_apply_recentre(&vrr.stage, raw_views)) {
+            vr_logf("render: recentred (yaw %.1f deg, standing height %s %.2f m)", vrr.stage.recentre.yaw * 180.0 / M_PI,
+                height ? "taken:" : "kept:", vrr.stage.recentre.origin[1]);
+        }
+    }
+    comfort_frame(stereo, hold, dt);
+
     if (hold) {
         gVrBillboardHead = false;
         replay_black_eyes(layers);
@@ -861,10 +1123,10 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
             replay_black_eyes(layers);
         }
     } else if (world) {
-        vr_stage_apply_recentre(&vrr.stage, raw_views);
-
+        // The anchor is the game camera as shown: turned by the queued comfort
+        // turn, then closer and lower (comfort_frame)
         vr_anchor_t anchor;
-        vr_anchor_from_cam(&vrr.cam, vrr.st.rig.level_pitch, &anchor);
+        vr_anchor_from_cam(&vrr.shown_cam, vrr.st.rig.level_pitch, &anchor);
         vr_eye_cam_t head_cam;
         // The star select is a small fixed scene: its own scale makes it a diorama
         vr_rig_t rig = vrr.st.rig;

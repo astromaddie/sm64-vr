@@ -1,99 +1,13 @@
-// The command list, the stereo/mono policy (mode switches, recentre, fade,
+// The stereo/mono policy (mode switches, recentre and standing height, fade,
 // panel) and the [vr-perf] feed. No GL, no runtime.
 
 #include <string.h>
 
 #include "sfvr_test.h"
-#include "vr_cmd.h"
 #include "vr_perf.h"
 #include "vr_stage.h"
 
 #define SEC 1000000000LL
-
-static vr_vertex_t vertex(float x) {
-	vr_vertex_t v;
-	memset(&v, 0, sizeof(v));
-	v.pos[0] = x;
-	return v;
-}
-
-static void push_triangle(vr_cmdlist_t *l, float x, uint8_t flags) {
-	vr_vertex_t v[3] = { vertex(x), vertex(x + 1), vertex(x + 2) };
-	vr_cmdlist_push_tris(l, v, flags);
-}
-
-static void test_cmdlist_orders_and_coalesces(void) {
-	vr_cmdlist_t l;
-	vr_cmdlist_init(&l);
-	vr_cmdlist_reset(&l, 1, false);
-	CHECK_INT(l.initial_blend, 1);
-	CHECK(!l.initial_cull);
-
-	push_triangle(&l, 0, 0);
-	push_triangle(&l, 10, 0);
-	push_triangle(&l, 20, 0);
-	CHECK_INT(l.cmd_len, 1); // one range
-	CHECK_INT(l.cmds[0].u.tris.first, 0);
-	CHECK_INT(l.cmds[0].u.tris.count, 3);
-
-	vr_cmd_t *c = vr_cmdlist_push(&l, VR_CMD_DEPTH_WRITE, 0);
-	c->u.on = false;
-	push_triangle(&l, 30, 0); // a state change ends the range
-	CHECK_INT(l.cmd_len, 3);
-	CHECK_INT(l.cmds[2].u.tris.first, 3);
-	CHECK_INT(l.cmds[2].u.tris.count, 1);
-
-	push_triangle(&l, 40, VR_CMD_FLAG_2D); // another segment is its own range
-	CHECK_INT(l.cmd_len, 4);
-	CHECK_INT(l.cmds[3].flags, VR_CMD_FLAG_2D);
-	CHECK_INT(l.cmds[3].u.tris.first, 4);
-
-	CHECK_INT(l.vert_len, 15);
-	CHECK_NEAR(l.verts[4 * 3].pos[0], 40, 0);
-	CHECK_INT(l.tris_3d, 4);
-	CHECK_INT(l.tris_2d, 1);
-
-	// a sprite is a command of its own
-	c = vr_cmdlist_push(&l, VR_CMD_SPRITE, 0);
-	c->u.sprite.texture = 7;
-	CHECK_INT(l.sprite_count, 1);
-
-	// reset keeps nothing but the storage
-	vr_cmdlist_reset(&l, 0, true);
-	CHECK_INT(l.cmd_len, 0);
-	CHECK_INT(l.vert_len, 0);
-	CHECK_INT(l.sprite_count, 0);
-	push_triangle(&l, 50, 0);
-	CHECK_INT(l.cmds[0].u.tris.first, 0);
-
-	// growth past the first allocation keeps earlier data
-	vr_cmdlist_reset(&l, 0, true);
-	for (int i = 0; i < 5000; i++) {
-		push_triangle(&l, (float)i, 0);
-		if (i % 100 == 0) {
-			vr_cmdlist_push(&l, VR_CMD_CULL, 0);
-		}
-	}
-	CHECK_INT(l.vert_len, 15000);
-	CHECK_NEAR(l.verts[4999 * 3].pos[0], 4999, 0);
-	CHECK_INT(l.cmds[0].u.tris.first, 0);
-	vr_cmdlist_free(&l);
-}
-
-static void test_cmdlist_cameras(void) {
-	vr_cmdlist_t l;
-	vr_cmdlist_init(&l);
-	vr_cmdlist_reset(&l, 0, true);
-	vr_camset_t cam;
-	memset(&cam, 0, sizeof(cam));
-	cam.game_position[0] = 5;
-	CHECK_INT(vr_cmdlist_push_cam(&l, &cam), 0);
-	cam.game_position[0] = 6;
-	CHECK_INT(vr_cmdlist_push_cam(&l, &cam), 1);
-	CHECK_NEAR(l.cams[0].game_position[0], 5, 0);
-	CHECK_NEAR(l.cams[1].game_position[0], 6, 0);
-	vr_cmdlist_free(&l);
-}
 
 static void test_fade_curve(void) {
 	CHECK_NEAR(vr_fade_alpha(0), 1, 1e-6);
@@ -172,6 +86,56 @@ static void test_recentre_applies_once_at_a_stereo_frame(void) {
 	CHECK(!vr_stage_apply_recentre(&s, v));
 }
 
+static vr_view_t eye_at_height(float yaw, float x, float y) {
+	vr_view_t v = eye_at(yaw, x);
+	v.pose.position[1] = y;
+	return v;
+}
+
+// standard.md section 1: a recentre takes the head's yaw and horizontal
+// position and keeps the standing height (ducking then lowers the view); the
+// first one, View held 3 s and `seated` take the height too
+static void test_recentre_keeps_standing_height(void) {
+	vr_stage_t s;
+	vr_stage_init(&s);
+	vr_stage_set_mode(&s, VR_MODE_STEREO, SEC);
+	vr_view_t standing[2] = { eye_at_height(0.2f, 0.47f, 1.6f), eye_at_height(0.2f, 0.53f, 1.6f) };
+	CHECK(vr_stage_apply_recentre(&s, standing));
+	CHECK_NEAR(s.recentre.origin[1], 1.6, 1e-5);
+
+	// Crouched 0.4 m and moved: the 1 s recentre keeps the standing height
+	vr_view_t crouched[2] = { eye_at_height(-0.7f, 1.17f, 1.2f), eye_at_height(-0.7f, 1.23f, 1.2f) };
+	vr_stage_request_recentre(&s);
+	CHECK(vr_stage_apply_recentre(&s, crouched));
+	CHECK_NEAR(s.recentre.yaw, -0.7, 1e-5);
+	CHECK_NEAR(s.recentre.origin[0], 1.2, 1e-5);
+	CHECK_NEAR(s.recentre.origin[1], 1.6, 1e-5);
+	// A mode switch's recentre keeps it too
+	vr_stage_set_mode(&s, VR_MODE_MONO, 2 * SEC);
+	vr_stage_set_mode(&s, VR_MODE_STEREO, 3 * SEC);
+	CHECK(vr_stage_apply_recentre(&s, crouched));
+	CHECK_NEAR(s.recentre.origin[1], 1.6, 1e-5);
+
+	// View held 3 s: the height is taken again
+	vr_stage_request_height(&s);
+	CHECK(s.recentre_pending);
+	CHECK(vr_stage_apply_recentre(&s, crouched));
+	CHECK_NEAR(s.recentre.origin[1], 1.2, 1e-5);
+	CHECK(!s.height_pending);
+	vr_stage_request_recentre(&s);
+	CHECK(vr_stage_apply_recentre(&s, standing));
+	CHECK_NEAR(s.recentre.origin[1], 1.2, 1e-5);
+
+	// Seated: every recentre takes it
+	s.seated = true;
+	vr_stage_request_recentre(&s);
+	CHECK(vr_stage_apply_recentre(&s, standing));
+	CHECK_NEAR(s.recentre.origin[1], 1.6, 1e-5);
+	vr_stage_request_recentre(&s);
+	CHECK(vr_stage_apply_recentre(&s, crouched));
+	CHECK_NEAR(s.recentre.origin[1], 1.2, 1e-5);
+}
+
 static void test_panel_is_placed_then_held(void) {
 	vr_stage_t s;
 	vr_stage_init(&s);
@@ -218,7 +182,7 @@ static void test_perf_line(void) {
 			emitted++;
 			CHECK(strncmp(line, "[vr-perf] fps=", 14) == 0);
 			CHECK(strstr(line, "missed=1") != NULL);
-			CHECK(strstr(line, "record=1.00 replay=4.40 hud=0.50") != NULL);
+			CHECK(strstr(line, "tick=1.00 replay=4.40 hud=0.50") != NULL);
 			CHECK(strstr(line, "eye=2.20/2.10ms") != NULL);
 			CHECK(strstr(line, "cpu=5.90ms") != NULL);
 			CHECK(strstr(line, "gpu=n/a") != NULL);
@@ -228,11 +192,10 @@ static void test_perf_line(void) {
 }
 
 int main(void) {
-	RUN(test_cmdlist_orders_and_coalesces);
-	RUN(test_cmdlist_cameras);
 	RUN(test_fade_curve);
 	RUN(test_mode_switch_fades_and_recentres);
 	RUN(test_recentre_applies_once_at_a_stereo_frame);
+	RUN(test_recentre_keeps_standing_height);
 	RUN(test_panel_is_placed_then_held);
 	RUN(test_perf_line);
 	return SFVR_TEST_RESULT("vr_stage");

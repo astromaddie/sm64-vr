@@ -9,20 +9,20 @@ static void test_data_dir(void) {
 	char dir[256];
 
 	CHECK(vr_paths_data_dir("/data", "/home/steamos", dir, sizeof(dir)));
-	CHECK_STR(dir, "/data/WipEoutVR/");
+	CHECK_STR(dir, "/data/SM64VR/");
 
 	CHECK(vr_paths_data_dir("/data/", "/home/steamos", dir, sizeof(dir)));
-	CHECK_STR(dir, "/data/WipEoutVR/");
+	CHECK_STR(dir, "/data/SM64VR/");
 
 	// unset, empty or relative XDG_DATA_HOME: ~/.local/share
 	CHECK(vr_paths_data_dir(NULL, "/home/steamos", dir, sizeof(dir)));
-	CHECK_STR(dir, "/home/steamos/.local/share/WipEoutVR/");
+	CHECK_STR(dir, "/home/steamos/.local/share/SM64VR/");
 	CHECK(vr_paths_data_dir("", "/home/steamos", dir, sizeof(dir)));
-	CHECK_STR(dir, "/home/steamos/.local/share/WipEoutVR/");
+	CHECK_STR(dir, "/home/steamos/.local/share/SM64VR/");
 	CHECK(vr_paths_data_dir("relative/dir", "/home/steamos", dir, sizeof(dir)));
-	CHECK_STR(dir, "/home/steamos/.local/share/WipEoutVR/");
+	CHECK_STR(dir, "/home/steamos/.local/share/SM64VR/");
 	CHECK(vr_paths_data_dir(NULL, "/home/steamos/", dir, sizeof(dir)));
-	CHECK_STR(dir, "/home/steamos/.local/share/WipEoutVR/");
+	CHECK_STR(dir, "/home/steamos/.local/share/SM64VR/");
 
 	// nothing usable
 	CHECK(!vr_paths_data_dir(NULL, NULL, dir, sizeof(dir)));

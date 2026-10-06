@@ -38,6 +38,18 @@
 #include "pc/djui/djui.h"
 #include "first_person_cam.h"
 #include "rendering_graph_node.h"
+#ifdef SM64_VR
+#include "pc/vr/vr_game.h"
+#include "pc/vr/vr_turn.h"
+
+// A VR comfort turn holds the Lakitu (default) camera's heading: it does not
+// swing back behind an idle Mario until he moves or the player turns it
+static u8 sVrTurnOwned = FALSE;
+// The turn taken since the camera node was last rendered, and its pivot: the
+// node's previous position turns with it, so the interpolation does too
+static f32 sVrTurnApplied = 0.f;
+static Vec3f sVrTurnAppliedPivot;
+#endif
 
 #ifdef SM64_VR
 #include "pc/vr/vr_game.h"
@@ -2311,6 +2323,12 @@ s16 update_default_camera(struct Camera *c) {
             } else {
                 yawVel = nextYawVel;
             }
+#ifdef SM64_VR
+            // A comfort turn holds the heading the wearer chose until Mario moves
+            if (sVrTurnOwned) {
+                yawVel = 0;
+            }
+#endif
         } else {
             if (nextYawVel == 0x1000) {
                 yawVel = nextYawVel;
@@ -3043,6 +3061,157 @@ void set_camera_mode(struct Camera *c, s16 mode, s16 frames) {
     }
 }
 
+#ifdef SM64_VR
+enum VrTurnKind { VR_TURN_KIND_NONE, VR_TURN_KIND_DEFAULT, VR_TURN_KIND_RADIAL, VR_TURN_KIND_OUTWARD, VR_TURN_KIND_8DIR };
+
+// Which of the game camera's own states a VR comfort turn is handed to
+// (docs/VR_ARCHITECTURE.md section 4): the Lakitu and Mario cameras that
+// trail Mario (free roam, close, Mario cam: their position is the state), the
+// radial cameras (sModeOffsetYaw, which the game keeps within 120 degrees) and
+// the 8-direction camera (s8DirModeYawOffset). Authored cameras (boss, fixed,
+// paths, slides, stairs), the ones that follow Mario's facing (swimming,
+// flying, the cannon), C-up, the free and rom-hack cameras, cutscenes, pause,
+// mode transitions and C-button swings in progress take none.
+static s32 vr_turn_kind(struct Camera *c) {
+    if (!gVrActive || c == NULL || c->cutscene != 0 || sCurrPlayMode == PLAY_MODE_PAUSED || gDjuiInMainMenu) {
+        return VR_TURN_KIND_NONE;
+    }
+    if (sModeTransition.framesLeft > 0
+        || (gCameraMovementFlags & CAM_MOVE_FIX_IN_PLACE)
+        || (sStatusFlags & CAM_FLAG_BEHIND_MARIO_POST_DOOR)
+        || sMarioCamState->action == ACT_GETTING_BLOWN) {
+        return VR_TURN_KIND_NONE;
+    }
+    if (gCurrLevelNum != LEVEL_CASTLE && cam_select_alt_mode(0) == CAM_SELECTION_FIXED
+        && (gPlayer1Controller->buttonDown & R_TRIG)) {
+        return VR_TURN_KIND_NONE; // R held: Lakitu is fixed in place
+    }
+    if (sSelectionFlags & CAM_MODE_MARIO_ACTIVE) {
+        switch (c->mode) {
+            case CAMERA_MODE_BEHIND_MARIO:
+            case CAMERA_MODE_C_UP:
+            case CAMERA_MODE_WATER_SURFACE:
+            case CAMERA_MODE_INSIDE_CANNON:
+            case CAMERA_MODE_NEWCAM:
+                return VR_TURN_KIND_NONE;
+            default:
+                return VR_TURN_KIND_DEFAULT; // mode_mario_camera
+        }
+    }
+    switch (c->mode) {
+        case CAMERA_MODE_RADIAL:
+        case CAMERA_MODE_OUTWARD_RADIAL:
+            // Not while the radial camera swings itself (C buttons, the
+            // rotating floors, the return from C-up): those set sModeOffsetYaw
+            if (gCameraMovementFlags & (CAM_MOVING_INTO_MODE | CAM_MOVE_ROTATE)) {
+                return VR_TURN_KIND_NONE;
+            }
+            return c->mode == CAMERA_MODE_RADIAL ? VR_TURN_KIND_RADIAL : VR_TURN_KIND_OUTWARD;
+        case CAMERA_MODE_8_DIRECTIONS:
+            return VR_TURN_KIND_8DIR;
+        case CAMERA_MODE_CLOSE:
+        case CAMERA_MODE_FREE_ROAM:
+            return VR_TURN_KIND_DEFAULT;
+        default:
+            return VR_TURN_KIND_NONE;
+    }
+}
+
+static void vr_turn_limits(s32 kind, f32 *left, f32 *right) {
+    const f32 unit = VR_TURN_PI / 32768.f;
+    // radial_camera_move() bounds sModeOffsetYaw to +-0x5554 (120 degrees);
+    // the outward radial camera pulls anything past 60 degrees back at about
+    // 84 degrees a second even with Mario still (offset_yaw_outward_radial),
+    // so a turn stops there
+    s32 bound = kind == VR_TURN_KIND_OUTWARD ? DEGREES(60) : 0x5554;
+    switch (kind) {
+        case VR_TURN_KIND_RADIAL:
+        case VR_TURN_KIND_OUTWARD:
+            *left = (f32)(bound - (s32)sModeOffsetYaw) * unit;
+            *right = (f32)((s32)sModeOffsetYaw + bound) * unit;
+            if (*left < 0.f) { *left = 0.f; }
+            if (*right < 0.f) { *right = 0.f; }
+            break;
+        case VR_TURN_KIND_DEFAULT:
+        case VR_TURN_KIND_8DIR:
+            *left = *right = VR_TURN_UNLIMITED;
+            break;
+        default:
+            *left = *right = 0.f;
+            break;
+    }
+}
+
+static void vr_turn_point(Vec3f p, Vec3f pivot, f32 turn) {
+    vr_turn_rotate_about(p, pivot, turn);
+}
+
+// At the start of a camera update, before the mode runs: the queued comfort
+// turn turns the whole camera rig about Mario in one step, so the camera
+// shows it at once and nothing eases (vr_turn.h, "the turn protocol")
+static void vr_camera_take_turn(struct Camera *c) {
+    s32 kind = vr_turn_kind(c);
+    if (kind != VR_TURN_KIND_DEFAULT || gMarioStates[0].forwardVel != 0.f || sCSideButtonYaw != 0
+        || (gPlayer1Controller->buttonPressed & (L_CBUTTONS | R_CBUTTONS))) {
+        sVrTurnOwned = FALSE;
+    }
+    f32 left, right, refused = 0.f;
+    vr_turn_limits(kind, &left, &right);
+    f32 turn = vr_turn_take(&gVrCamTurn.queued, kind != VR_TURN_KIND_NONE, left, right, &refused);
+    if (refused != 0.f) {
+        gVrCamTurn.refused++;
+    }
+    if (turn == 0.f) {
+        return;
+    }
+
+    // Mario at the last render (where the renderer's orbit was); Mario now
+    // when there was none or he has been moved far since (a warp)
+    Vec3f pivot;
+    vec3f_copy(pivot, sMarioCamState->pos);
+    if (gVrCamTurn.pivot_valid) {
+        f32 dx = gVrCamTurn.pivot[0] - pivot[0], dz = gVrCamTurn.pivot[2] - pivot[2];
+        if (dx * dx + dz * dz < 500.f * 500.f) {
+            vec3f_copy(pivot, gVrCamTurn.pivot);
+        }
+    }
+    vr_turn_point(gLakituState.curPos, pivot, turn);
+    vr_turn_point(gLakituState.curFocus, pivot, turn);
+    vr_turn_point(gLakituState.goalPos, pivot, turn);
+    vr_turn_point(gLakituState.goalFocus, pivot, turn);
+    vr_turn_point(gLakituState.pos, pivot, turn);
+    vr_turn_point(gLakituState.focus, pivot, turn);
+    vr_turn_point(c->pos, pivot, turn);
+    vr_turn_point(c->focus, pivot, turn);
+    vr_turn_point(sOldPosition, pivot, turn);
+    vr_turn_point(sOldFocus, pivot, turn);
+
+    s16 units = vr_turn_angle_s16(turn);
+    c->yaw += units;
+    c->nextYaw += units;
+    gLakituState.yaw += units;
+    gLakituState.nextYaw += units;
+    if (kind == VR_TURN_KIND_RADIAL || kind == VR_TURN_KIND_OUTWARD) {
+        sModeOffsetYaw += units;
+    } else if (kind == VR_TURN_KIND_8DIR) {
+        s8DirModeYawOffset += units;
+    } else {
+        sVrTurnOwned = TRUE;
+    }
+    sVrTurnApplied += turn;
+    vec3f_copy(sVrTurnAppliedPivot, pivot);
+    gVrCamTurn.taken += turn;
+}
+
+// At the end of a camera update: what the camera can take next
+static void vr_camera_publish_turn_gate(struct Camera *c) {
+    s32 kind = vr_turn_kind(c);
+    gVrCamTurn.allowed = kind != VR_TURN_KIND_NONE;
+    vr_turn_limits(kind, &gVrCamTurn.limit_left, &gVrCamTurn.limit_right);
+    gVrCamTurn.updates++;
+}
+
+#endif
 /**
  * Updates Lakitu's position/focus and applies camera shakes.
  */
@@ -3116,10 +3285,17 @@ void update_lakitu(struct Camera *c) {
         gLakituState.roll = 0;
 
         // Apply camera shakes
+#ifdef SM64_VR
+        // camera_shake off (the VR default): Lakitu's shakes are not applied
+        if (!(gVrActive && gVrCamTurn.no_shake)) {
+#endif
         shake_camera_pitch(gLakituState.pos, gLakituState.focus);
         shake_camera_yaw(gLakituState.pos, gLakituState.focus);
         shake_camera_roll(&gLakituState.roll);
         shake_camera_handheld(gLakituState.pos, gLakituState.focus);
+#ifdef SM64_VR
+        }
+#endif
 
         if (sMarioCamState->action == ACT_DIVE && gLakituState.lastFrameAction != ACT_DIVE) {
             set_camera_shake_from_hit(SHAKE_HIT_FROM_BELOW);
@@ -3259,6 +3435,9 @@ void update_camera(struct Camera *c) {
     c->nextYaw = gLakituState.nextYaw;
     c->mode = gLakituState.mode;
     c->defMode = gLakituState.defMode;
+#ifdef SM64_VR
+    vr_camera_take_turn(c);
+#endif
 
     if (c->mode != CAMERA_MODE_NEWCAM) {
         camera_course_processing(c);
@@ -3425,6 +3604,9 @@ void update_camera(struct Camera *c) {
     update_lakitu(c);
 
     gLakituState.lastFrameAction = sMarioCamState->action;
+#ifdef SM64_VR
+    vr_camera_publish_turn_gate(c);
+#endif
 
     // Make sure the palette editor cutscene is properly reset
     struct MarioState *m = gMarioState;
@@ -3445,6 +3627,13 @@ void reset_camera(struct Camera *c) {
     gCamera = c;
     gCameraMovementFlags = 0;
     s2ndRotateFlags = 0;
+#ifdef SM64_VR
+    // A new area: no turn carries over, and the pivot is found again
+    sVrTurnOwned = FALSE;
+    sVrTurnApplied = 0.f;
+    gVrCamTurn.queued = 0.f;
+    gVrCamTurn.pivot_valid = FALSE;
+#endif
     sStatusFlags = 0;
     gCutsceneTimer = 0;
     sCutsceneShot = 0;
@@ -3793,6 +3982,24 @@ void update_graph_node_camera(struct GraphNodeCamera *gc) {
     vec3f_copy(gc->pos, gLakituState.pos);
     vec3f_copy(gc->focus, gLakituState.focus);
     zoom_out_if_paused_and_outside(gc);
+#ifdef SM64_VR
+    // geo_process_camera() has just copied the last tick's position into
+    // prevPos: a comfort turn taken since turns it too, so the frames between
+    // the ticks are the turned camera's own motion, never a swing
+    if (sVrTurnApplied != 0.f) {
+        vr_turn_rotate_about(gc->prevPos, sVrTurnAppliedPivot, sVrTurnApplied);
+        vr_turn_rotate_about(gc->prevFocus, sVrTurnAppliedPivot, sVrTurnApplied);
+        sVrTurnApplied = 0.f;
+    }
+    // Mario now and at the last render: the turn's pivot, interpolated per frame
+    if (gVrCamTurn.pivot_valid) {
+        vec3f_copy(gVrCamTurn.pivot_prev, gVrCamTurn.pivot);
+    } else {
+        vec3f_copy(gVrCamTurn.pivot_prev, sMarioCamState->pos);
+    }
+    vec3f_copy(gVrCamTurn.pivot, sMarioCamState->pos);
+    gVrCamTurn.pivot_valid = TRUE;
+#endif
 }
 
 Gfx *geo_camera_main(s32 callContext, struct GraphNode *g, void *context) {

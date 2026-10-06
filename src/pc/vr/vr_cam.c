@@ -108,6 +108,118 @@ void vr_anchor_from_cam(const vr_game_cam_t *cam, bool level_pitch, vr_anchor_t 
     memcpy(out->position, cam->position, sizeof(out->position));
 }
 
+float vr_game_cam_heading(const vr_game_cam_t *cam) {
+    // forward = -back; heading = atan2(-forward.x, -forward.z)
+    float bx = cam->back[0], bz = cam->back[2];
+    if (bx * bx + bz * bz < 1e-8f) {
+        // Straight down: the image's top points ahead; straight up: behind
+        float s = cam->back[1] > 0.0f ? 1.0f : -1.0f;
+        bx = -cam->up[0] * s;
+        bz = -cam->up[2] * s;
+    }
+    return atan2f(bx, bz);
+}
+
+// The game camera for axes and a position: the view's rows are the axes
+static void cam_from_axes(const float right[3], const float up[3], const float back[3], const float pos[3],
+    vr_game_cam_t *out) {
+    float view[16];
+    for (int i = 0; i < 3; i++) {
+        view[i * 4 + 0] = right[i];
+        view[i * 4 + 1] = up[i];
+        view[i * 4 + 2] = back[i];
+        view[i * 4 + 3] = 0.0f;
+    }
+    view[12] = -dot3(right, pos);
+    view[13] = -dot3(up, pos);
+    view[14] = -dot3(back, pos);
+    view[15] = 1.0f;
+    memcpy(out->view, view, sizeof(view));
+    memcpy(out->right, right, sizeof(out->right));
+    memcpy(out->up, up, sizeof(out->up));
+    memcpy(out->back, back, sizeof(out->back));
+    vr_mat4_rigid_inverse(view, out->inv_view);
+    memcpy(out->position, pos, sizeof(out->position));
+}
+
+// A direction turned about +Y by `heading` (+Z toward +X: positive turns left)
+static void yaw_dir(const float v[3], float c, float s, float out[3]) {
+    float r[3] = { v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c };
+    memcpy(out, r, sizeof(r));
+}
+
+void vr_game_cam_orbit(const vr_game_cam_t *cam, const float pivot[3], float heading, vr_game_cam_t *out) {
+    if (heading == 0.0f || !isfinite(heading)) {
+        if (out != cam) {
+            *out = *cam;
+        }
+        return;
+    }
+    float c = cosf(heading), s = sinf(heading);
+    float rel[3] = { cam->position[0] - pivot[0], cam->position[1] - pivot[1], cam->position[2] - pivot[2] };
+    float pos[3], right[3], up[3], back[3];
+    yaw_dir(rel, c, s, pos);
+    for (int i = 0; i < 3; i++) {
+        pos[i] += pivot[i];
+    }
+    yaw_dir(cam->right, c, s, right);
+    yaw_dir(cam->up, c, s, up);
+    yaw_dir(cam->back, c, s, back);
+    cam_from_axes(right, up, back, pos, out);
+}
+
+static float clamp01(float v, float hi) {
+    return v < 0.0f ? 0.0f : (v > hi ? hi : v);
+}
+
+void vr_third_person_origin(const float eye[3], const float at[3], float lower, float closer, float out[3]) {
+    lower = clamp01(lower, 1.0f);
+    closer = clamp01(closer, 0.8f);
+    float p[3];
+    for (int i = 0; i < 3; i++) {
+        p[i] = eye[i] + closer * (at[i] - eye[i]);
+    }
+    p[1] += lower * (at[1] - p[1]);
+    memcpy(out, p, sizeof(p));
+}
+
+static float line_pitch(const float from[3], const float to[3]) {
+    float dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
+    return atan2f(dy, sqrtf(dx * dx + dz * dz));
+}
+
+void vr_game_cam_third_person(const vr_game_cam_t *cam, const float at[3], float lower, float closer,
+    vr_game_cam_t *out) {
+    lower = clamp01(lower, 1.0f);
+    closer = clamp01(closer, 0.8f);
+    if (lower == 0.0f && closer == 0.0f) {
+        if (out != cam) {
+            *out = *cam;
+        }
+        return;
+    }
+    float pos[3];
+    vr_third_person_origin(cam->position, at, lower, closer, pos);
+
+    float heading = vr_game_cam_heading(cam);
+    float fy = -cam->back[1];
+    float pitch = asinf(fy < -1.0f ? -1.0f : (fy > 1.0f ? 1.0f : fy));
+    pitch += line_pitch(pos, at) - line_pitch(cam->position, at);
+    const float lim = 89.0f * 3.14159265358979323846f / 180.0f;
+    pitch = pitch < -lim ? -lim : (pitch > lim ? lim : pitch);
+
+    float ch = cosf(heading), sh = sinf(heading), cp = cosf(pitch), sp = sinf(pitch);
+    float forward[3] = { -sh * cp, sp, -ch * cp };
+    float right[3] = { ch, 0.0f, -sh };
+    float up[3], back[3];
+    cross3(right, forward, up);
+    normalize3(up);
+    back[0] = -forward[0];
+    back[1] = -forward[1];
+    back[2] = -forward[2];
+    cam_from_axes(right, up, back, pos, out);
+}
+
 static void view_from(const float rot[9], const float pos[3], float out[16]) {
     // world -> eye: [R^T  -R^T p]
     for (int c = 0; c < 3; c++) {
@@ -145,6 +257,9 @@ void vr_eye_from_pose(const vr_anchor_t *anchor, const vr_rig_t *rig, const vr_r
     vr_mat3_mulv(anchor->rotation, local, world);
     for (int i = 0; i < 3; i++) {
         out->position[i] = anchor->position[i] + world[i];
+    }
+    if (rig->height_offset != 0.0f) {
+        out->position[1] += rig->height_offset * rig->world_scale;
     }
 
     float pose_rot[9], recentred[9];

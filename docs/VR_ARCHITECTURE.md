@@ -63,11 +63,94 @@ launches.
   or 1.5, is kept. Version-2 files are never touched.
 - **Measurement.** See section 7.
 
-## 4. World scale
+## 4. Camera, scale and comfort
 
-Mario is 161 units tall; `world_scale = 104` units per metre makes him 1.55 m, life size. The star
-select screen has its own scale (`star_select_scale`, 300). `level_pitch` drops the game camera's pitch so
-the head supplies it.
+The eyes ride on the game camera (Lakitu): its interpolated view is the anchor, with its heading, its
+pitch unless `level_pitch` (default on) drops it, and never its roll; the head pose goes on top. All of
+this section's code is `src/pc/vr/vr_cam.c` (rig maths), `vr_turn.c` (turning, the stick's frame, the
+vignette ramp; both pure and host-tested), the comfort part of `vr_render.c`, and the hooks in
+`src/game/camera.c` and `mario.c`.
+
+**Scale and height.** Mario is 161 units tall; `world_scale = 104` units per metre makes him 1.55 m, life
+size. The range is 20 (Mario 8 m) to 400 (Mario 0.4 m, a diorama). The star select screen has its own
+scale (`star_select_scale`, 300). `camera_closer` (0 to 0.8) moves the head origin along the line from the
+game camera to its look-at point and `camera_lower` (0 to 1) then moves the height that is left toward the
+look-at point's (after DK64: for camera E and look-at A, P.xz = E.xz + C (A.xz - E.xz),
+P.y = A.y + (1 - C)(1 - L)(E.y - A.y)); lowering turns the inherited pitch toward A, the heading stays.
+They apply in gameplay only, not on the star select. There is no collision test for the moved origin, so
+large values can put the eye inside walls or Mario. `height_offset` raises the eyes by that many metres
+(times `world_scale`). Eye offsets (the IPD) come only from the runtime's eye poses and are scaled by
+`world_scale` alone; `head_translation` scales only the head's displacement from the recentre point;
+orbit distances and pivots stay in game units. Every key here is read every frame, so a change applies
+at once.
+
+**Recentre and height (standard.md section 1).** View held 1 s recentres: the head's yaw becomes the view's
+forward and its horizontal position the origin, with a 0.6/80 ms buzz on both hands. The standing height is
+kept, so ducking lowers the view (by `head_translation`). View held 3 s recentres again and takes the
+standing height from the head, with a second buzz. The height is also taken at the first stereo frame,
+when the headset is put on again (focus gained), on the runtime's own recentre, and when tracked views take
+over from `force_render`'s synthetic ones. A switch between the panel and stereo recentres the yaw and
+keeps the height. In this third-person view the calibrated head height sits at the game camera, so a
+seated wearer already sees the standing view; `seated` makes every recentre (the 1 s hold and each panel
+switch too) take the height again, so a seated wearer who slumps or shifts is put back at the camera
+by the ordinary recentre. Menu is the game's Start; a short View press is the gamepad Back (the player
+list in online play; SM64 itself has no Select).
+
+**Turning (`turn_mode`, `snap_angle`, `smooth_turn_speed`).** Right stick X, through the sfvr turn helper:
+a 30 degree snap at 70% deflection that re-arms below 30% (15 to 90 degrees), or smooth turning at up to
+120 degrees per second past a 20% deadzone. SM64's camera eases to a new yaw (Lakitu flies a chord to his
+goal), so a written yaw alone would read as a slow swing (lesson 94). The turn is handed to the game
+camera instead, in one step:
+
+1. The renderer adds the stick's turn to `gVrCamTurn.queued` and shows it the same frame: the anchor is the
+   game camera orbited about Mario (the interpolated `gVrInterpPivot`) by what is queued.
+2. The next camera update (`vr_camera_take_turn` in `update_camera`) takes the queue and turns the whole
+   camera rig about Mario by it: Lakitu's current and goal position and focus, the camera's yaws, the
+   mode's own yaw (`sModeOffsetYaw` for the radial cameras, `s8DirModeYawOffset` for the 8-direction
+   one) and the camera node's previous position (`update_graph_node_camera`), so the frames between the
+   ticks interpolate the turned camera. Nothing eases, and the sound and culling follow the turned camera.
+3. The queue is empty again in the frame that shows the turned camera, so the orbit and the game's own turn
+   never add up: the shown heading moves once.
+
+The game camera's own turns (C buttons, walls, cuts, the radial camera following Mario) are not
+compensated; they show as the game makes them, as before. Which camera takes a turn
+(`vr_turn_kind`): the Lakitu and Mario cameras that trail Mario (free roam, close, Mario cam), the
+radial cameras within the game's own 120 degree bound on `sModeOffsetYaw` (60 degrees for the outward
+radial cameras of Tick Tock Clock, Dire Dire Docks and the volcano, which pull anything further back at about
+84 degrees a second; a snap is cut at the bound, or dropped when less than 5 degrees is left, and logged),
+and the 8-direction camera. When Mario runs, the radial camera's own rule eases an offset past 60 degrees
+back to 60, as it does after the C buttons. Authored cameras
+(boss, fixed, path, slide, stairs), the ones that follow Mario's facing (swimming, flying, the cannon),
+C-up, the free and rom-hack cameras, cutscenes, pause, mode transitions and a radial C-button swing in
+progress take none: the stick does nothing then. The Lakitu camera normally swings back behind an idle
+Mario at about 32 degrees per second; after a comfort turn it holds the chosen heading until Mario moves
+or the player turns the camera. With turning on, right stick X never reaches the game; the game's C-left
+and C-right (its own camera swing) are on the D-pad's left and right (the Frame only: Index and Touch have
+no D-pad, so there they need `turn_mode = off`, which gives the stick back to them). C-up and C-down stay
+on right stick Y.
+
+**Movement (`move_relative`, `third_person_move`).** In stereo play Mario's stick is relative to what the
+wearer sees: `mario.c` adds to the camera's yaw the turn still queued and the yaw of the head (`head`, the
+default) or of the left or right hand's aim pose (`left`, `right`; the head when the hand is not tracked),
+each measured from the recentre's forward. SM64 already turns Mario to walk where the stick points
+(`third_person_move = face_move`; there is no aiming, so `face_camera` does not apply). The game's own
+rule that pulling back does not turn the camera's movement yaw is kept.
+
+**The rest of the comfort set.** `vignette` (off) / `vignette_strength` (0.6) darken the edge of each eye's
+image, centred on that eye's own axis, during artificial rotation: the shown heading's rate without the
+head (smooth turning, the game camera turning by itself), from nothing below 5 degrees per second to the
+full strength at 30. It closes in 0.2 s and opens in 0.5 s; a snap or a camera cut is a jump, not motion,
+and shows none. It is a blended full-screen triangle drawn after each eye's world pass (the HUD quad stays
+clear). `camera_shake` (off) leaves out Lakitu's shakes (`update_lakitu`: pitch, yaw, roll and handheld
+shake). `head_translation` (1.0) and `level_pitch` as above. `horizon_lock`, `follow_vehicle_rotation`,
+`roomscale`, `lean_limit` and `duck_crouch` do not apply (no vehicles, no first-person body).
+
+**Diagnostics.** `[vr-cam]` lines: every snap (shown and game camera heading, and whether the camera's limit
+cut it), a turn the camera could not take or that was ignored (at most one line in 2 s), and every 10 s the shown and game camera headings, the turn taken in all, the gate
+and the comfort values. `diag_turn_stick = D` holds right stick X at D for 4 s and releases it for 4 s in
+stereo play (a snap a hold, or the smooth turn), logs the headings and their rates every 0.25 s, and traces
+the 12 frames after each snap: the shown heading should step once by the snap angle and the game camera's
+heading should reach it within a tick, never swinging after. The `dump_frame` state file has a `comfort` line.
 
 ## 5. Frame protocol
 
@@ -82,11 +165,33 @@ and keeps polling.
 ## 6. Settings and diagnostics
 
 `vr.toml` in `~/.local/share/SM64VR/` (keys from the sfvr registry plus `world_scale`, `level_pitch`,
-`star_select_scale`, `force_mono`, `fov_mode`, `panel_distance`, `panel_width`, `cutscenes`,
-`cinema_distance`, `cinema_width` and the diagnostics).
+`star_select_scale`, `camera_closer`, `camera_lower`, `third_person_move`, `force_mono`, `fov_mode`,
+`panel_distance`, `panel_width`, `cutscenes`, `cinema_distance`, `cinema_width` and the diagnostics).
+
+Comfort keys (section 4; all live):
+
+| Key | Default | Range |
+| --- | --- | --- |
+| `turn_mode` | `snap` | `snap`, `smooth`, `off` |
+| `snap_angle` | 30 | 15, 30, 45, 60, 90 |
+| `smooth_turn_speed` | 120 deg/s | 30 to 360 |
+| `vignette` / `vignette_strength` | off / 0.6 | 0 to 1 |
+| `move_relative` | `head` | `head`, `left`, `right` |
+| `third_person_move` | `face_move` | `face_move` only |
+| `world_scale` | 104 units/m | 20 to 400 |
+| `camera_closer` | 0 | 0 to 0.8 |
+| `camera_lower` | 0 | 0 to 1 |
+| `height_offset` | 0 m | -1 to 1 (the sfvr registry's range) |
+| `seated` | off | |
+| `head_translation` | 1.0 | 0 to 2 |
+| `camera_shake` | off | |
+| `level_pitch` | on | |
+| `diag_turn_stick` | 0 (off) | -1 to 1, config and env only |
+
 Environment variables `SM64_VR_<KEY>` override a key for one run. Diagnostics: `force_render`
 (draw and run in standby with a synthetic head), `diag_yaw`, `dump_frame`, `dump_worn_frame`,
-`probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, `diag_cinema_seconds`, and `timing` for the `[vr-perf]` line every 10 s
+`probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, `diag_cinema_seconds` (section 11),
+`diag_turn_stick` (section 4), and `timing` for the `[vr-perf]` line every 10 s
 (`fps`, `missed`, `cpu`, `tick`, `replay`, `hud`, `eye`, `gpu`). The stages are CPU submission times;
 `gpu` is the GPU time of the eye and HUD passes from timestamp queries read a few frames late. While
 the rate check runs it logs `refresh rate: N fps over 10 s at R Hz (frame period ...)` each window.
@@ -127,7 +232,20 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 2. Castle Grounds start to the first painting: sharpness of the world and the HUD at 2160 per eye.
 3. Enter a course (Bob-omb Battlefield): the warp fade, then play for a few minutes, looking at frame
    smoothness. Note any `refresh rate: ... not held` line in the log.
-4. Snap and smooth turning, recentre (hold L View), haptics.
+4. Turning and camera (section 4), in Castle Grounds (free roam) and Bob-omb Battlefield (radial):
+   - Snap right and left with Mario idle: one clean 30 degree step, no swing after, and the view stays
+     there (no slow swing back behind Mario). Push forward: Mario walks where you look.
+   - In Bob-omb Battlefield keep snapping one way: the turns stop at the radial camera's bound; note how
+     that feels. D-pad left/right still swing the game's camera (C-left/C-right). In the castle lobby
+     (a fixed camera) the stick does not turn at all: is head turning enough there?
+   - `turn_mode = smooth`: a steady turn at the stick's rate that stops on release; then with
+     `vignette = true`: the edges darken while turning (and while the game camera turns by itself).
+   - Turn the head 90 degrees and push forward: Mario walks where the head points.
+   - Recentre (hold L View 1 s, buzz) facing sideways; duck: the view lowers; hold 3 s (second buzz): the
+     duck becomes the standing height. `seated = true` sitting down: the view stays at the camera.
+   - `camera_closer = 0.4`, `camera_lower = 0.5`, `world_scale` 60 and 200: any of them uncomfortable or
+     clipping into walls?
+   - Haptics on the game's rumble.
 5. Say whether 120 felt held; if not, which scene dropped.
 6. New Game: read the Peach letter below the stereo picture, then watch Lakitu's tour. Turn/tilt the
    head and recentre: the screen stays world-locked and level; camera cuts cause no extra fades.
@@ -149,7 +267,13 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Stereo gameplay, display-time scheduler, level pitch | headset-unverified |
 | Star select in stereo, warp transitions with a fade quad | headset-unverified |
 | fov_mode 3 (the Frame's measured full fov) | headset-unverified |
-| Frame controller input, snap or smooth turning, haptics | headset-unverified |
+| Frame controller input, haptics | headset-unverified |
+| Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | pure test |
+| Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
+| `world_scale` 20 to 400, `camera_closer`, `camera_lower`, `height_offset` (rig maths, contract, IPD, default bit parity) | pure test |
+| Recentre keeps the standing height; View held 3 s, focus and `seated` take it | pure test |
+| Vignette on artificial rotation (ramp), `camera_shake` off | pure test (ramp); drawing and the shake hook unrun |
+| `[vr-cam]` logs and `diag_turn_stick` | built, unrun |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |
 | In-headset VR settings page: tab table, value mapping (world scale as Mario's height), registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
 | Runtime settings API: set with clamping, reset, save, reload, environment overrides never written back | pure test (`tests/vr/test_vr_settings.c`) |
@@ -176,7 +300,7 @@ performance, Accessibility & audio (no entries yet, so it is not listed), Room. 
   with no change here. The cinema and comfort keys are in the table already (`cutscenes`,
   `cinema_distance`, `cinema_width`, `camera_closer`, `camera_lower`). `src/pc/djui/djui_panel_vr.c`
   builds the panels from it; `djui_slider.c` has a small `SM64_VR` hook to show a unit instead of the
-  step number. World scale is shown as Mario's height in metres (161 / `world_scale`, 0.25 to 3.0 m).
+  step number. World scale is shown as Mario's height in metres (161 / `world_scale`, 0.45 to 3.0 m; `world_scale` 20 to 400 allows 0.40 to 8.05 m).
   Resolution is read when the swapchains are made, so its label says "(restart)"; the refresh rate
   label says "SteamVR wins" (section 3). Sliders use whole steps (at most about 60 stops), because
   DJUI's pad control moves a slider one step per tick.

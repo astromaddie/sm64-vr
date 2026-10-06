@@ -59,10 +59,17 @@ const vr_gamepad_t *vr_input_gamepad(void);
 // 30 Hz tick cannot miss a press made between two of them.
 void vr_input_pad_consumed(void);
 
-// L View held 1 s (and again at 3 s) asks for a recentre; the renderer takes it
-// at a frame boundary.
+// L View held 1 s asks for a recentre (the head's yaw and horizontal
+// position), held 3 s for one that takes the standing height again; the
+// renderer applies them at a frame boundary.
 void vr_request_recentre(void);
 bool vr_take_recentre_request(void);
+void vr_request_height(void);
+bool vr_take_height_request(void);
+
+// The yaw (vr_yaw_of) of a hand's aim pose (0 left, 1 right) in LOCAL space at
+// the latest frame's display time; false when it is not tracked.
+bool vr_input_hand_yaw(int hand, float *yaw);
 
 // The game's rumble (osMotorStart / osMotorStop through controller_rumble_*):
 // 40 ms pulses on both hands at `strength` while it lasts (the `rumble` event).
@@ -93,8 +100,9 @@ typedef struct {
 void vr_pad_init(vr_pad_t *pad);
 
 // One frame with focus: the system layer (L View through sfvr_view at now_s),
-// then the gamepad. Returns the SFVR_VIEW_* events of the frame; a recentre
-// event calls vr_request_recentre() and queues the `system` buzz on both hands.
+// then the gamepad. Returns the SFVR_VIEW_* events of the frame. The 1 s hold
+// calls vr_request_recentre(), the 3 s hold vr_request_height(); each queues
+// the `system` buzz on both hands.
 unsigned vr_pad_map(vr_pad_t *pad, const vr_pad_sample_t *sample, double now_s, vr_gamepad_t *out);
 
 // Focus lost or session stopped: everything released, the View press cancelled

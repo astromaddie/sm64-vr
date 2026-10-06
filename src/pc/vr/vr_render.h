@@ -46,6 +46,8 @@ void vr_render_shutdown(void);
 
 // Applied at the next stereo frame; the panel is re-placed at the next mono one.
 void vr_render_request_recentre(void);
+// The same, taking the standing height again (vr_stage_request_height).
+void vr_render_request_height(void);
 
 // Replaces the settings the renderer reads (from vr_render_settings_from()) between
 // frames, so a change on the in-headset page shows on the next XR frame. Sizes that

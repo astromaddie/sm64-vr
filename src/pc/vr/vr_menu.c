@@ -57,7 +57,7 @@ static const vr_menu_entry_t entries[] = {
 
 	// 6 Room
 	{ .key = "world_scale", .label = "World scale (Mario)", .tab = VR_TAB_ROOM, .widget = VR_MENU_SLIDER,
-		.lo = 0.25, .hi = 3.0, .step = 0.05, .invert_units = VR_MENU_MARIO_UNITS, .format = "%.2f m" },
+		.lo = 0.45, .hi = 3.0, .step = 0.05, .invert_units = VR_MENU_MARIO_UNITS, .format = "%.2f m" },
 	SLIDER("star_select_scale", "Star select scale", VR_TAB_ROOM, 100, 1000, 25, 1, "%.0f"),
 	SLIDER_RANGE("camera_closer", "Camera closer", VR_TAB_ROOM, "%.2f"),
 	SLIDER_RANGE("camera_lower", "Camera lower", VR_TAB_ROOM, "%.2f"),

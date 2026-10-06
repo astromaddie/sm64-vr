@@ -314,12 +314,16 @@ bool vr_frame_begin(void) {
     // (maybe another wearer) or the input layer's request (L View held): the
     // renderer recentres at the next stereo frame boundary
     bool recentre = vr_take_recentre_request();
+    bool height = vr_take_height_request();
     if (vr.recentres_seen != vr.xr.recentre_requests || vr.focus_gains_seen != vr.xr.focus_gains) {
+        // The headset put on again or moved by the runtime: the standing height too
         vr.recentres_seen = vr.xr.recentre_requests;
         vr.focus_gains_seen = vr.xr.focus_gains;
-        recentre = true;
+        height = true;
     }
-    if (recentre) {
+    if (height) {
+        vr_render_request_height();
+    } else if (recentre) {
         vr_render_request_recentre();
     }
 

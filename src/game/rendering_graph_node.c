@@ -383,6 +383,8 @@ void patch_mtx_interpolated(f32 delta) {
         delta_interpolate_vec3f(vrFocus, sCameraNode->prevFocus, sCameraNode->focus, delta);
         mtxf_lookat(vrCam, vrPos, vrFocus, sCameraNode->roll);
         memcpy(gVrInterpCamView, vrCam, sizeof(gVrInterpCamView));
+        memcpy(gVrInterpCamFocus, vrFocus, sizeof(gVrInterpCamFocus));
+        delta_interpolate_vec3f(gVrInterpPivot, gVrCamTurn.pivot_prev, gVrCamTurn.pivot, delta);
         gVrInterpCamValid = true;
     }
 #endif

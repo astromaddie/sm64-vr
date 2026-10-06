@@ -28,7 +28,7 @@ step_on() {
 }
 
 step_tests() {
-	in_container "make -C tests/vr run"
+	in_container "bash tests/vr/run_all.sh"
 }
 
 step_package() {

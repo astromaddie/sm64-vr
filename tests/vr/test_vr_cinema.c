@@ -16,6 +16,9 @@
 #include "vr_game.h"
 #include "vr_render.h"
 #include "pc/gfx/gfx_vr.h"
+#include "vr.h"
+#include "vr_input.h"
+#include "vr_settings.h"
 #endif
 
 #define SEC 1000000000LL
@@ -340,6 +343,29 @@ static void render_release(void *user, vr_surface_t surface) { (void)user; (void
 
 // The pause menu's DJUI flag (src/pc/djui/djui_panel_pause.c): no menu in these frames
 bool gDjuiPanelPauseCreated = false;
+
+// The runtime's settings, pad and hand poses (vr.c, vr_input.c): defaults, a
+// centred pad and no tracked hands, so the comfort step stays idle
+const vr_settings_t *vr_settings(void) {
+    static vr_settings_t s;
+    static bool made;
+    if (!made) {
+        vr_settings_defaults(&s);
+        made = true;
+    }
+    return &s;
+}
+
+const vr_gamepad_t *vr_input_gamepad(void) {
+    static vr_gamepad_t pad;
+    return &pad;
+}
+
+bool vr_input_hand_yaw(int hand, float *yaw) {
+    (void)hand;
+    (void)yaw;
+    return false;
+}
 
 void gfx_vr_run_pass(Gfx *dl, const struct GfxVrPass *pass) {
     (void)dl;

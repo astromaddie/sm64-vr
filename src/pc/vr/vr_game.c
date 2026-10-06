@@ -7,3 +7,6 @@ float gVrBillboardRot[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 float gVrCylboardRot[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 float gVrInterpCamView[16];
 bool gVrInterpCamValid = false;
+float gVrInterpCamFocus[3];
+float gVrInterpPivot[3];
+struct VrCamTurn gVrCamTurn;
