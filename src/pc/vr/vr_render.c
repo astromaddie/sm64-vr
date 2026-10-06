@@ -745,7 +745,11 @@ static void comfort_frame(bool stereo, bool hold, float dt) {
     if (step.delta != 0.0f) {
         gVrCamTurn.queued += step.delta;
     }
-    if (step.kind == VR_TURN_STEP_SNAP) {
+    if (step.closed && vrr.play && now_s - vrr.limit_log_s > 2.0) {
+        vrr.limit_log_s = now_s;
+        cam_logf("turn: ignored: %s", gVrCamTurn.allowed ? "the camera has not updated lately"
+            : "this camera takes no turn (an authored, swimming, flying or C-up camera, a cutscene or pause)");
+    } else if (step.kind == VR_TURN_STEP_SNAP && !step.closed) {
         if (step.delta != 0.0f) {
             cam_logf("turn: snap %s %.0f deg%s (shown %.1f deg, game camera %.1f deg)", step.delta > 0.0f ? "left" : "right",
                 fabsf(step.delta) * VR_RAD_DEG, step.limited ? ", cut by the camera's limit" : "",

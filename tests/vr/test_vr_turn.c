@@ -55,7 +55,9 @@ static void test_snap_hysteresis(void) {
 	vr_turn_reset(&t);
 	c = config(SFVR_TURN_SNAP);
 	vr_turn_gate_t closed = { false, 0.0f, VR_TURN_UNLIMITED, VR_TURN_UNLIMITED };
-	CHECK_NEAR(vr_turn_frame(&t, &c, 1.0f, 0.01f, &closed).delta, 0.0, 1e-9);
+	s = vr_turn_frame(&t, &c, 1.0f, 0.01f, &closed);
+	CHECK_NEAR(s.delta, 0.0, 1e-9);
+	CHECK(s.closed);
 	CHECK_NEAR(vr_turn_frame(&t, &c, 1.0f, 0.01f, &g).delta, 0.0, 1e-9);
 	CHECK_NEAR(vr_turn_frame(&t, &c, 0.0f, 0.01f, &g).delta, 0.0, 1e-9);
 	CHECK_NEAR(vr_turn_frame(&t, &c, 1.0f, 0.01f, &g).delta, -30.0f * DEG, 1e-6);

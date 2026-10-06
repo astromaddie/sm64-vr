@@ -3196,8 +3196,8 @@ static void vr_camera_publish_turn_gate(struct Camera *c) {
     vr_turn_limits(kind, &gVrCamTurn.limit_left, &gVrCamTurn.limit_right);
     gVrCamTurn.updates++;
 }
-#endif
 
+#endif
 /**
  * Updates Lakitu's position/focus and applies camera shakes.
  */

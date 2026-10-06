@@ -94,6 +94,7 @@ typedef struct {
 	float delta; // to add to the queue
 	int kind; // VR_TURN_STEP_*
 	bool limited; // the camera's limit cut (or dropped) it
+	bool closed; // the stick turned, but the gate was closed: nothing turns
 } vr_turn_step_t;
 
 typedef struct {

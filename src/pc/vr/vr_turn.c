@@ -76,13 +76,17 @@ static float clampf(float v, float lo, float hi) {
 
 vr_turn_step_t vr_turn_frame(vr_turn_t *t, const sfvr_turn_config *cfg, float stick_x, float dt,
 	const vr_turn_gate_t *gate) {
-	vr_turn_step_t step = { 0.0f, VR_TURN_STEP_NONE, false };
+	vr_turn_step_t step = { 0.0f, VR_TURN_STEP_NONE, false, false };
 	// sfvr: degrees, positive turning right; here positive turns left
 	float deg = sfvr_turn_update(&t->stick, cfg, stick_x, dt);
-	if (deg == 0.0f || !gate || !gate->open) {
+	if (deg == 0.0f) {
 		return step;
 	}
 	step.kind = (cfg && cfg->mode == SFVR_TURN_SMOOTH) ? VR_TURN_STEP_SMOOTH : VR_TURN_STEP_SNAP;
+	if (!gate || !gate->open) {
+		step.closed = true;
+		return step;
+	}
 	float want = -deg * VR_TURN_DEG;
 	float left = gate->limit_left > 0.0f ? gate->limit_left : 0.0f;
 	float right = gate->limit_right > 0.0f ? gate->limit_right : 0.0f;
