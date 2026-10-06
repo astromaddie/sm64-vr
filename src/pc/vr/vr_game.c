@@ -10,3 +10,4 @@ bool gVrInterpCamValid = false;
 float gVrInterpCamFocus[3];
 float gVrInterpPivot[3];
 struct VrCamTurn gVrCamTurn;
+struct VrSettingsPage gVrSettingsPage;

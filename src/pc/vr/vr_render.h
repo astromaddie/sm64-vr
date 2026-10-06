@@ -48,6 +48,8 @@ void vr_render_shutdown(void);
 void vr_render_request_recentre(void);
 // The same, taking the standing height again (vr_stage_request_height).
 void vr_render_request_height(void);
+// The next drawn frame is dumped (as dump_frame), its files named `tag`vr-eye0.png and so on.
+void vr_render_request_dump(const char *tag);
 
 // Replaces the settings the renderer reads (from vr_render_settings_from()) between
 // frames, so a change on the in-headset page shows on the next XR frame. Sizes that

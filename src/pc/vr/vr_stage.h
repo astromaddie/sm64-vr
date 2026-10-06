@@ -108,6 +108,14 @@ void vr_stage_request_height(vr_stage_t *s);
 // Returns true on a change.
 bool vr_stage_set_mode(vr_stage_t *s, vr_mode_t mode, int64_t now_ns);
 
+// The same black fade without a mode change or a recentre: the shown camera jumps
+// within a mode (SM64's pause overview, section 10).
+void vr_stage_fade(vr_stage_t *s, int64_t now_ns);
+
+// Takes the standing height from this frame's head and nothing else (yaw and the
+// horizontal origin stay): `seated` switched on. False before the first recentre.
+bool vr_stage_take_height(vr_stage_t *s, const vr_view_t views[2]);
+
 // Applies a pending recentre (or the first one) from this frame's head, at the
 // start of a stereo frame. Returns true when it did.
 bool vr_stage_apply_recentre(vr_stage_t *s, const vr_view_t views[2]);

@@ -15,6 +15,7 @@
 #include "vr_paths.h"
 
 static const char *const third_person_move_values[] = { "face_move", NULL };
+static const char *const settings_page_side_values[] = { "right", "left", "centre", NULL };
 
 // Keys that only this port has. The standard keys live in the sfvr registry.
 static const sfvr_setting_key port_keys[] = {
@@ -69,7 +70,15 @@ static const sfvr_setting_key port_keys[] = {
 	{ "dump_worn_frame", SFVR_SETTING_INT, 0.0, 0.0, 1000000.0, NULL },
 	// The flat panel for menus and transitions: a world-locked quad.
 	{ "panel_distance", SFVR_SETTING_FLOAT, 2.0, 0.8, 20.0, NULL },
-	{ "panel_width", SFVR_SETTING_FLOAT, 2.2, 0.5, 10.0, NULL }
+	{ "panel_width", SFVR_SETTING_FLOAT, 2.2, 0.5, 10.0, NULL },
+	// The VR settings page turns to this side of the view while it is open, so the
+	// gameplay view it changes stays in sight (docs/VR_ARCHITECTURE.md section 10).
+	// centre leaves it where the pause menu opened. Live.
+	{ "settings_page_side", SFVR_SETTING_ENUM, 0.0, 0.0, 2.0, settings_page_side_values },
+	// Diagnostic: after this many seconds of gameplay, pause, open the pause menu and
+	// the VR settings page, step world_scale and camera_closer and put them back,
+	// close and resume, with a named dump at each stage. 0 = off.
+	{ "diag_settings_preview", SFVR_SETTING_FLOAT, 0.0, 0.0, 600.0, NULL }
 };
 #define PORT_KEY_COUNT (sizeof(port_keys) / sizeof(port_keys[0]))
 

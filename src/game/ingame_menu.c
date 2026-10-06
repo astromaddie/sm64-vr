@@ -39,6 +39,9 @@
 #include "pc/lua/utils/smlua_text_utils.h"
 #include "menu/ingame_text.h"
 #include "pc/dialog_table.h"
+#ifdef SM64_VR
+#include "pc/vr/vr_game.h"
+#endif
 
 u16 gDialogColorFadeTimer;
 s8 gLastDialogLineNum;
@@ -3052,7 +3055,12 @@ s16 render_pause_courses_and_castle(void) {
         gDialogTextAlpha += 25;
     }
 
+#ifdef SM64_VR
+    // Not over the gameplay view the VR settings page previews on
+    if (gDjuiPanelPauseCreated && !gDjuiInPlayerMenu && !gVrSettingsPage.open) { shade_screen(); }
+#else
     if (gDjuiPanelPauseCreated && !gDjuiInPlayerMenu) { shade_screen(); }
+#endif
     if (gPlayer1Controller->buttonPressed & R_TRIG) {
         djui_panel_pause_create(NULL);
     }

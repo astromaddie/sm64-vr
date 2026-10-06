@@ -457,6 +457,7 @@ void render_game(void) {
     gVrTick.gameplay_camera = false;
     gVrTick.in_main_menu = gDjuiInMainMenu;
     gVrTick.star_select = false;
+    gVrTick.pause_overview = false;
     gVrTick.transition = gWarpTransition.isActive;
     gVrTick.transition_hold = gCurrentArea != NULL && gWarpTransition.pauseRendering;
     gVrTick.transition_alpha = gVrTick.transition_hold ? 1.0f : 0.0f;
@@ -491,6 +492,10 @@ void render_game(void) {
             smlua_call_event_hooks(HOOK_ON_HUD_RENDER_BEHIND, djui_reset_hud_params);
             djui_gfx_displaylist_end();
         }
+#ifdef SM64_VR
+        // hud_visible off, previewed behind the open VR settings page
+        if (!gVrSettingsPage.hide_hud)
+#endif
         render_hud();
 
         gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);

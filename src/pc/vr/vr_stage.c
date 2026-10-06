@@ -88,6 +88,21 @@ bool vr_stage_set_mode(vr_stage_t *s, vr_mode_t mode, int64_t now_ns) {
 	return true;
 }
 
+void vr_stage_fade(vr_stage_t *s, int64_t now_ns) {
+	s->fade_active = true;
+	s->fade_start_ns = now_ns;
+}
+
+bool vr_stage_take_height(vr_stage_t *s, const vr_view_t views[2]) {
+	if (!s->recentre_valid) {
+		return false;
+	}
+	vr_pose_t head;
+	vr_head_pose(views, &head);
+	s->recentre.origin[1] = head.position[1];
+	return true;
+}
+
 bool vr_stage_apply_recentre(vr_stage_t *s, const vr_view_t views[2]) {
 	if (!s->recentre_pending && s->recentre_valid) {
 		return false;
