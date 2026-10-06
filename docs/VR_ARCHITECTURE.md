@@ -32,9 +32,9 @@ launches.
 
 - **The app can't change the rate on the Frame.** SteamVR offers an app one rate: the title's per-app
   preferred rate (`steam.app.<id>` in `steamvr.vrsettings`), applied to Steam-title launches only. The user
-  sets it once, in SteamVR's per-app settings in the headset. **Recommended for this title: 120 Hz.** The
-  unattended measurement below suggests it fits (GPU 3.3 ms, CPU 2.7 ms against 8.33 ms), but 120 has not
-  been run, so this is a recommendation, not a measurement.
+  sets it once, in SteamVR's per-app settings in the headset. **This title: 120 Hz, resolution 2160**, set
+  on 2026-10-06 (`steam.app.3166136263`: `preferredRefreshRate` 120, `resolutionOverride` 2160, with the
+  playbook's `steamvr-per-app.sh`). It holds 120 Hz at 2160 per eye (section 7).
 - **Request.** `refresh_rate` (default 120) is the requested rate where a runtime honours it. At the READY
   state the port enumerates the offered rates and, once, requests the offered rate nearest the setting with
   `xrRequestDisplayRefreshRateFB`, unless the display already runs at it (SteamVR answers that with an
@@ -102,14 +102,23 @@ Unattended, headset on the desk (`force_render`), launched through Steam as the 
 | CPU (`[vr-perf]`) | 2.6 to 2.8 ms: tick 0.12, replay 2.1 (eyes 0.8 and 1.25), hud 0.5 |
 | GPU (`[vr-perf]`) | 3.3 ms for both eyes and the HUD at 90 Hz |
 
-3.3 ms GPU and 2.7 ms CPU against an 8.33 ms period at 120 Hz leave room, but 120 Hz itself has not been
-measured: the display stayed at 90 Hz because the per-app setting is 90 and the app can't change it. The
+**120 Hz, 2026-10-06.** With the per-app entry at 120 Hz / 2160, same method (Steam launch, `force_render`,
+`diag_menu_stereo`: the main menu's Castle Grounds background in stereo), three runs of about 60 s:
+
+| Item | Result |
+| --- | --- |
+| Offered / granted | 120 Hz / 120 Hz (`Preferred refresh rate for 'steam.app.3166136263' is 120.00Hz`), frame period 8.33 ms |
+| Eye swapchains | 2160 x 2160 (base 1728 x 1.25; the runtime now recommends 2160, which is no longer multiplied) |
+| Frame rate | 120.0 fps, `missed=0` in every `[vr-perf]` window of all three runs |
+| CPU / GPU | CPU 3.0 to 3.1 ms (replay 2.2 to 2.3, eyes 0.9 and 1.3, hud 0.7); GPU 3.6 ms, of an 8.33 ms period |
+
+Before that, the display stayed at 90 Hz because the per-app setting was 90 and the app can't change it. The
 live "not held" report has not been seen on the device, since the rate was held; the window logic is
 unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb Battlefield) were not run: the unattended run has no input.
 
 ## 8. Wear checklist (at most 15 minutes)
 
-0. In SteamVR's per-app settings, **set the SM64 title to 120 Hz** (it is 90 now), then launch it from Steam.
+0. The per-app rate is already 120 Hz / 2160 (set over SSH 2026-10-06). Launch from Steam.
    Check the log (`deploy.sh --logs`) for `frame period 8.33 ms` and `refresh rate: ... at 120 Hz`.
 1. Menus on the flat panel: file select, pause, the course and act select (stereo).
 2. Castle Grounds start to the first painting: sharpness of the world and the HUD at 2160 per eye.
@@ -124,7 +133,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | --- | --- |
 | Single refresh-rate request for an offered rate, offered rates and change event logged | headset-unverified |
 | "Rate not held" report after two low windows (window logic unit-tested; the counting runs on the device at 90 Hz, the report not seen) | headset-unverified |
-| Title runs at 120 Hz with the per-app rate set to 120 | not started (needs the per-app setting, then a run) |
+| Title runs at 120 Hz with the per-app rate set to 120 | verified unattended (3 runs, 120.0 fps, 0 missed, GPU 3.6 ms at 2160) |
 | `[vr-perf]` GPU time from timestamp queries | headset-unverified (read unattended) |
 | 2160 x 2160 eye swapchains, rendered directly | headset-unverified |
 | `refresh_rate` / `resolution_scale` settings and v1 to v2 migration (unit-tested) | headset-unverified |
