@@ -42,6 +42,33 @@ extern float gVrCylboardRot[3][3];
 // (patch_mtx_interpolated), as the game's Mat4 memory. Valid for one XR frame.
 extern float gVrInterpCamView[16];
 extern bool gVrInterpCamValid;
+// ... its focus (look-at point), and Mario (the turn pivot) at the same time
+extern float gVrInterpCamFocus[3];
+extern float gVrInterpPivot[3];
+
+// Comfort turning and the stick's frame (src/pc/vr/vr_turn.h has the protocol;
+// docs/VR_ARCHITECTURE.md section 4). Angles are headings in radians, positive
+// turning left, the same sense as SM64's yaws.
+struct VrCamTurn {
+    // The renderer adds the stick's turn; the next camera update takes it all
+    // (or refuses it) and turns the camera rig about Mario in one step
+    float queued;
+    // camera.c, every camera update: whether, and how far, the camera can turn
+    bool allowed;
+    float limit_left, limit_right;
+    unsigned int updates;
+    // Mario at the last two camera renders (the pivot; interpolated per frame)
+    float pivot[3], pivot_prev[3];
+    bool pivot_valid;
+    float taken; // in total, for the log
+    unsigned int refused; // camera updates that dropped a queued turn
+    // The renderer, every frame: in stereo play Mario's stick frame is the
+    // wearer's (the camera's yaw + move_yaw + queued), and Lakitu's shakes are off
+    bool move_active;
+    float move_yaw;
+    bool no_shake;
+};
+extern struct VrCamTurn gVrCamTurn;
 
 #endif
 

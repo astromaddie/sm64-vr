@@ -71,7 +71,9 @@ typedef struct {
 	bool recentre_pending; // applied at the next stereo frame
 	bool panel_pending; // the mono panel is re-placed at the next mono frame
 	bool recentre_valid;
-	vr_recentre_t recentre;
+	vr_recentre_t recentre; // origin[1] is the standing height (see below)
+	bool height_pending; // the next recentre takes the head's height too
+	bool seated; // every recentre takes the height (the renderer sets it from `seated`)
 	bool panel_valid;
 	vr_pose_t panel_pose;
 	bool fade_active;
@@ -85,6 +87,13 @@ void vr_stage_init(vr_stage_t *s);
 // A recentre was asked for (the input layer, focus gain, a reference-space
 // change): applies at the next stereo frame, and the panel is re-placed.
 void vr_stage_request_recentre(vr_stage_t *s);
+
+// The same with the standing height taken again (standard.md section 1: View
+// held 3 s; also focus gained and the runtime's recentre). A recentre takes
+// the head's yaw and horizontal position; it keeps the standing height, from
+// which the head's height moves the view (ducking lowers it), except for the
+// first one, one asked for here, or any with `seated` set.
+void vr_stage_request_height(vr_stage_t *s);
 
 // The frame's mode. A change starts the black fade and requests a recentre.
 // Returns true on a change.

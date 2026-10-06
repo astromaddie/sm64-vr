@@ -45,6 +45,11 @@ void vr_stage_request_recentre(vr_stage_t *s) {
 	s->panel_pending = true;
 }
 
+void vr_stage_request_height(vr_stage_t *s) {
+	s->height_pending = true;
+	vr_stage_request_recentre(s);
+}
+
 bool vr_stage_set_mode(vr_stage_t *s, vr_mode_t mode, int64_t now_ns) {
 	if (mode == s->mode) {
 		return false;
@@ -63,9 +68,15 @@ bool vr_stage_apply_recentre(vr_stage_t *s, const vr_view_t views[2]) {
 	}
 	vr_pose_t head;
 	vr_head_pose(views, &head);
+	float standing = s->recentre.origin[1];
+	bool keep_height = s->recentre_valid && !s->height_pending && !s->seated;
 	vr_recentre_from_head(&head, &s->recentre);
+	if (keep_height) {
+		s->recentre.origin[1] = standing;
+	}
 	s->recentre_valid = true;
 	s->recentre_pending = false;
+	s->height_pending = false;
 	s->recentres_applied++;
 	return true;
 }

@@ -134,15 +134,23 @@ static void controller_vr_read(OSContPad *pad) {
         pad->stick_y = 127;
     }
 
-    if (vp->right_x < -0x4000) { pad->button |= L_CBUTTONS; }
-    if (vp->right_x > 0x4000) { pad->button |= R_CBUTTONS; }
+    // Right stick X is the comfort turn (turn_mode snap or smooth,
+    // docs/VR_ARCHITECTURE.md section 4) and never reaches the game; the
+    // game's own C-left and C-right (its camera swing) move to the D-pad.
+    // turn_mode off gives the stick back to C-left/C-right.
+    const bool turnOnStick = vr_settings_get(vr_settings(), "turn_mode") != 2;
+    int16_t rightX = turnOnStick ? 0 : vp->right_x;
+    if (rightX < -0x4000) { pad->button |= L_CBUTTONS; }
+    if (rightX > 0x4000) { pad->button |= R_CBUTTONS; }
     if (vp->right_y < -0x4000) { pad->button |= U_CBUTTONS; }
     if (vp->right_y > 0x4000) { pad->button |= D_CBUTTONS; }
+    if (vp->buttons[VR_PAD_DPAD_LEFT]) { pad->button |= L_CBUTTONS; }
+    if (vp->buttons[VR_PAD_DPAD_RIGHT]) { pad->button |= R_CBUTTONS; }
 
     // Merge: the VR sticks win only when they are pushed
     s8 sx = 0, sy = 0, ex = 0, ey = 0;
     update_analog_stick(&sx, &sy, vp->left_x, vp->left_y);
-    update_analog_stick(&ex, &ey, vp->right_x, vp->right_y);
+    update_analog_stick(&ex, &ey, rightX, vp->right_y);
     if (sx != 0 || sy != 0) {
         pad->stick_x = sx;
         pad->stick_y = sy;

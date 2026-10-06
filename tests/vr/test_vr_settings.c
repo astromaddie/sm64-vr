@@ -70,7 +70,9 @@ static void test_registry(void) {
 		"follow_vehicle_rotation", "horizon_lock", "hud_mode", "hud_distance", "hud_scale",
 		"force_mono", "panel_distance", "panel_width",
 		"resolution_scale", "refresh_rate", "probe_seconds", "force_render", "diag_yaw", "dump_frame", "timing",
-		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand"
+		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand",
+		"smooth_turn_speed", "vignette_strength", "move_relative", "height_offset", "head_translation",
+		"camera_shake", "camera_closer", "camera_lower", "third_person_move", "diag_turn_stick"
 	};
 	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
 		CHECK(vr_settings_index(names[i]) >= 0);
@@ -78,7 +80,7 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 10);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 14);
 
 	// env names
 	char name[64];
@@ -416,6 +418,66 @@ static void test_migration_to_schema_2(void) {
 	vr_settings_free(&s);
 }
 
+// The comfort keys (docs/VR_ARCHITECTURE.md section 4): defaults, ranges,
+// a round trip through the file, and the environment (lesson 64)
+static void test_comfort_keys(void) {
+	vr_settings_t s;
+	parse(&s, "");
+	CHECK_NEAR(get(&s, "camera_closer"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "camera_lower"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "third_person_move"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "diag_turn_stick"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "camera_shake"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "height_offset"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "seated"), 0, 1e-9);
+	CHECK_NEAR(get(&s, "move_relative"), 0, 1e-9);
+	char *text = format(&s);
+	CHECK(has(text, "third_person_move = \"face_move\"\n"));
+	CHECK(has(text, "camera_closer = 0.0\n"));
+	free(text);
+	vr_settings_free(&s);
+
+	const char *file =
+		"version = 2\n"
+		"[vr]\n"
+		"world_scale = 1000\n"
+		"camera_closer = 0.95\n"
+		"camera_lower = 0.5\n"
+		"turn_mode = \"smooth\"\n"
+		"smooth_turn_speed = 180\n"
+		"move_relative = \"left\"\n"
+		"seated = true\n"
+		"height_offset = 0.25\n"
+		"third_person_move = \"face_camera\"\n"
+		"diag_turn_stick = 0.8\n";
+	CHECK(parse(&s, file) > 0);
+	CHECK_NEAR(get(&s, "world_scale"), 400, 1e-6); // clamped to 20..400
+	CHECK_NEAR(get(&s, "camera_closer"), 0.8, 1e-6); // clamped to 0..0.8
+	CHECK_NEAR(get(&s, "camera_lower"), 0.5, 1e-6);
+	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "smooth_turn_speed"), 180, 1e-6);
+	CHECK_NEAR(get(&s, "move_relative"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "seated"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "height_offset"), 0.25, 1e-6);
+	CHECK_NEAR(get(&s, "third_person_move"), 0, 1e-9); // face_camera does not apply: repaired
+	CHECK_NEAR(get(&s, "diag_turn_stick"), 0.8, 1e-6);
+	// What was written reads back with nothing to repair
+	text = format(&s);
+	vr_settings_t back;
+	CHECK_INT(parse(&back, text), 0);
+	for (size_t i = 0; i < vr_settings_count(); i++) {
+		CHECK_NEAR(back.file_values[i], s.file_values[i], 1e-6);
+	}
+	free(text);
+	vr_settings_free(&back);
+	vr_settings_free(&s);
+
+	parse(&s, "");
+	vr_settings_set(&s, "world_scale", 5.0);
+	CHECK_NEAR(get(&s, "world_scale"), 20, 1e-6);
+	vr_settings_free(&s);
+}
+
 static void test_set(void) {
 	vr_settings_t s;
 	parse(&s, "");
@@ -521,6 +583,7 @@ int main(void) {
 	RUN(test_duplicates_and_odd_files);
 	RUN(test_env_overrides);
 	RUN(test_migration_to_schema_2);
+	RUN(test_comfort_keys);
 	RUN(test_set);
 	RUN(test_load_and_save_files);
 	return SFVR_TEST_RESULT("vr_settings");

@@ -320,6 +320,164 @@ static void test_projection_kinds(void) {
     CHECK(!vr_game_proj_near_far(ortho, &n, &f));
 }
 
+// -----------------------------------------------------------------------------
+// Comfort: the turn's orbit, camera_closer / camera_lower, height_offset
+
+static float hdist3(const float a[3], const float b[3]) {
+    return hypotf(a[0] - b[0], a[2] - b[2]);
+}
+
+static void eyes_for(scene_t *s, const vr_game_cam_t *shown) {
+    vr_anchor_from_cam(shown, s->rig.level_pitch, &s->anchor);
+    for (int e = 0; e < 2; e++) {
+        vr_eye_from_pose(&s->anchor, &s->rig, &s->rc, &s->head, &s->views[e].pose, &s->eye[e]);
+    }
+}
+
+static void test_orbit(void) {
+    scene_t s;
+    make_scene(&s, 0.2f, 0.1f, 0.0f);
+    const float mario[3] = { -1300.0f, 160.0f, 2000.0f };
+    vr_game_cam_t o;
+    vr_game_cam_orbit(&s.cam, mario, 30.0f * DEG, &o);
+    CHECK_NEAR(vr_game_cam_heading(&o) - vr_game_cam_heading(&s.cam), 30.0f * DEG, 1e-5);
+    CHECK_NEAR(hdist3(o.position, mario), hdist3(s.cam.position, mario), 1e-2);
+    CHECK_NEAR(o.position[1], s.cam.position[1], 1e-3);
+    // A rigid camera: the view still inverts, its pitch is kept
+    vr_game_cam_t check;
+    CHECK(vr_game_cam_from_view(o.view, &check));
+    CHECK_NEAR(o.back[1], s.cam.back[1], 1e-6);
+    // Going on round: 12 x 30 degrees is where it started
+    vr_game_cam_t r = s.cam;
+    for (int k = 0; k < 12; k++) {
+        vr_game_cam_orbit(&r, mario, 30.0f * DEG, &r);
+    }
+    for (int i = 0; i < 3; i++) {
+        CHECK_NEAR(r.position[i], s.cam.position[i], 0.05);
+        CHECK_NEAR(r.back[i], s.cam.back[i], 1e-4);
+    }
+    // 0 turns nothing, bit for bit
+    vr_game_cam_orbit(&s.cam, mario, 0.0f, &o);
+    CHECK(memcmp(&o, &s.cam, sizeof(o)) == 0);
+    // Heading sense: positive turns left (as vr_yaw_of): a camera looking down
+    // -Z ends up looking toward -X
+    float from[3] = { 0, 100, 500 }, to[3] = { 0, 100, 0 }, view[16];
+    game_lookat(from, to, view);
+    vr_game_cam_t c;
+    CHECK(vr_game_cam_from_view(view, &c));
+    CHECK_NEAR(vr_game_cam_heading(&c), 0.0, 1e-6);
+    vr_game_cam_orbit(&c, to, 90.0f * DEG, &o);
+    CHECK_NEAR(-o.back[0], -1.0, 1e-5);
+    CHECK_NEAR(o.position[0], 500.0, 1e-2); // circled to +X, looking back at the pivot
+}
+
+static void test_third_person(void) {
+    const float e[3] = { 0.0f, 600.0f, 1000.0f }, a[3] = { 0.0f, 200.0f, 0.0f };
+    float p[3];
+    vr_third_person_origin(e, a, 0.0f, 0.5f, p);
+    CHECK_NEAR(p[2], 500.0, 1e-3);
+    CHECK_NEAR(p[1], 400.0, 1e-3);
+    vr_third_person_origin(e, a, 1.0f, 0.0f, p);
+    CHECK_NEAR(p[1], 200.0, 1e-3);
+    CHECK_NEAR(p[2], 1000.0, 1e-3);
+    // P.y = A.y + (1 - C)(1 - L)(E.y - A.y)
+    vr_third_person_origin(e, a, 0.25f, 0.3f, p);
+    CHECK_NEAR(p[1], 200.0f + 0.7f * 0.75f * 400.0f, 1e-3);
+    CHECK_NEAR(p[2], 700.0, 1e-3);
+    // Clamped: closer stops at 0.8, lower at 1
+    vr_third_person_origin(e, a, 2.0f, 5.0f, p);
+    CHECK_NEAR(p[2], 200.0, 1e-3);
+    CHECK_NEAR(p[1], 200.0, 1e-3);
+
+    // The camera moved there keeps its heading; lowered, it looks up toward A
+    float view[16];
+    game_lookat(e, a, view);
+    vr_game_cam_t c, t;
+    CHECK(vr_game_cam_from_view(view, &c));
+    vr_game_cam_third_person(&c, a, 0.5f, 0.3f, &t);
+    vr_third_person_origin(e, a, 0.5f, 0.3f, p);
+    for (int i = 0; i < 3; i++) {
+        CHECK_NEAR(t.position[i], p[i], 1e-3);
+    }
+    CHECK_NEAR(vr_game_cam_heading(&t), vr_game_cam_heading(&c), 1e-5);
+    // It still looks straight at A (the camera looked at A before)
+    float d[3] = { a[0] - p[0], a[1] - p[1], a[2] - p[2] };
+    float l = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    for (int i = 0; i < 3; i++) {
+        CHECK_NEAR(-t.back[i], d[i] / l, 1e-4);
+    }
+    CHECK(fabsf(t.right[1]) < 1e-6f); // no roll
+    // Closer only: the same direction, nearer
+    vr_game_cam_third_person(&c, a, 0.0f, 0.5f, &t);
+    for (int i = 0; i < 3; i++) {
+        CHECK_NEAR(t.back[i], c.back[i], 1e-5);
+    }
+    // Both 0: unchanged, bit for bit
+    vr_game_cam_third_person(&c, a, 0.0f, 0.0f, &t);
+    CHECK(memcmp(&t, &c, sizeof(t)) == 0);
+}
+
+// The rendering contract holds for an anchor turned, nearer and lower: the
+// game's baked camera is still the one undone, the shown one places the eyes
+static void test_contract_with_comfort(void) {
+    scene_t s;
+    make_scene(&s, 0.6f, -0.2f, 2.0f * DEG);
+    const float mario[3] = { -1300.0f, 160.0f, 2000.0f }, at[3] = { -1300.0f, 300.0f, 2000.0f };
+    vr_game_cam_t shown;
+    vr_game_cam_orbit(&s.cam, mario, -45.0f * DEG, &shown);
+    vr_game_cam_third_person(&shown, at, 0.4f, 0.5f, &shown);
+    s.rig.height_offset = 0.25f;
+    eyes_for(&s, &shown);
+    // check_contract's LOCAL -> world mapping has no height offset: add it to the anchor
+    s.anchor.position[1] += 0.25f * s.rig.world_scale;
+    check_contract(&s);
+}
+
+static void test_height_and_ipd(void) {
+    scene_t s;
+    make_scene(&s, 0.3f, 0.0f, 0.0f);
+    vr_eye_cam_t base[2];
+    memcpy(base, s.eye, sizeof(base));
+    s.rig.height_offset = 0.3f;
+    eyes_for(&s, &s.cam);
+    for (int e = 0; e < 2; e++) {
+        CHECK_NEAR(s.eye[e].position[1] - base[e].position[1], 0.3 * 104.0, 1e-3);
+        CHECK_NEAR(s.eye[e].position[0], base[e].position[0], 1e-6);
+        CHECK(memcmp(s.eye[e].rotation, base[e].rotation, sizeof(base[e].rotation)) == 0);
+    }
+    // The eye separation is the runtime's IPD times world_scale, whatever the
+    // turn, closer, lower and height do
+    const float mario[3] = { -1300.0f, 160.0f, 2000.0f };
+    const float scales[3] = { 20.0f, 104.0f, 400.0f };
+    for (int k = 0; k < 3; k++) {
+        s.rig.world_scale = scales[k];
+        vr_game_cam_t shown;
+        vr_game_cam_orbit(&s.cam, mario, 1.0f, &shown);
+        vr_game_cam_third_person(&shown, mario, 0.7f, 0.6f, &shown);
+        eyes_for(&s, &shown);
+        float d[3];
+        for (int i = 0; i < 3; i++) d[i] = s.eye[1].position[i] - s.eye[0].position[i];
+        CHECK_NEAR(sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), 0.064 * scales[k], 1e-2 * scales[k] / 104.0);
+    }
+}
+
+// Every comfort setting at its default leaves the rig bit for bit as it was
+static void test_default_parity(void) {
+    scene_t s;
+    make_scene(&s, 0.7f, -0.3f, 1.0f * DEG);
+    vr_eye_cam_t before[2];
+    memcpy(before, s.eye, sizeof(before));
+    vr_anchor_t anchor_before = s.anchor;
+    const float mario[3] = { -1300.0f, 160.0f, 2000.0f }, at[3] = { -1300.0f, 300.0f, 2000.0f };
+    vr_game_cam_t shown;
+    vr_game_cam_orbit(&s.cam, mario, 0.0f, &shown); // nothing queued
+    vr_game_cam_third_person(&shown, at, 0.0f, 0.0f, &shown); // closer 0, lower 0
+    s.rig.height_offset = 0.0f;
+    eyes_for(&s, &shown);
+    CHECK(memcmp(&s.anchor, &anchor_before, sizeof(anchor_before)) == 0);
+    CHECK(memcmp(s.eye, before, sizeof(before)) == 0);
+}
+
 int main(void) {
     RUN(test_contract_level);
     RUN(test_contract_turned_pitched_canted);
@@ -330,5 +488,10 @@ int main(void) {
     RUN(test_sky_has_no_translation);
     RUN(test_billboard_faces_head);
     RUN(test_projection_kinds);
+    RUN(test_orbit);
+    RUN(test_third_person);
+    RUN(test_contract_with_comfort);
+    RUN(test_height_and_ipd);
+    RUN(test_default_parity);
     return SFVR_TEST_RESULT("test_vr_cam");
 }

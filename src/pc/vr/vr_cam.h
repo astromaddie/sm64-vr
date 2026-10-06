@@ -32,6 +32,7 @@ typedef struct {
     float world_scale; // game units per metre
     float head_translation; // scale of the head centre's displacement; eye offsets are never scaled
     bool level_pitch; // the anchor drops the camera's pitch (the head supplies it)
+    float height_offset; // metres the eyes are raised (world up), times world_scale; 0 = none
 } vr_rig_t;
 
 // The game camera of a frame, from the view matrix its modelviews use.
@@ -55,6 +56,28 @@ typedef struct {
 
 void vr_anchor_from_cam(const vr_game_cam_t *cam, bool level_pitch, vr_anchor_t *out);
 
+// The heading of the camera's forward (radians, positive turning left, as
+// vr_yaw_of). Straight up or down: from its up vector.
+float vr_game_cam_heading(const vr_game_cam_t *cam);
+
+// The comfort turn (vr_turn.h): the camera orbited about the vertical line
+// through `pivot` by `heading` (positive left), position and axes. 0 copies it
+// unchanged. Game units throughout: no scale applies.
+void vr_game_cam_orbit(const vr_game_cam_t *cam, const float pivot[3], float heading, vr_game_cam_t *out);
+
+// The third-person head origin (camera_closer, camera_lower, after DK64): for
+// the camera at E looking at A, closer C moves it along E -> A, then lower L
+// moves the height that is left toward A's:
+//   P.xz = E.xz + C (A.xz - E.xz),  P.y = A.y + (1 - C)(1 - L)(E.y - A.y).
+// C is clamped to 0..0.8 and L to 0..1, so P stays between E and A.
+void vr_third_person_origin(const float eye[3], const float at[3], float lower, float closer, float out[3]);
+
+// The camera moved to that origin. Its heading stays; its pitch turns by as
+// much as the line to A did (lowering looks up at A). Both 0: copied unchanged.
+// No roll ever.
+void vr_game_cam_third_person(const vr_game_cam_t *cam, const float at[3], float lower, float closer,
+    vr_game_cam_t *out);
+
 // An eye (or the head centre) in the game's world.
 typedef struct {
     float position[3]; // game units
@@ -68,7 +91,7 @@ typedef struct {
 // head centre is not, so the IPD comes only from the runtime's eye poses. Both
 // are scaled by world_scale into game units. With the head at the recentre
 // origin and facing the recentre yaw, the head centre sits at the camera and
-// looks where the anchor looks.
+// looks where the anchor looks. height_offset then raises every eye alike.
 void vr_eye_from_pose(const vr_anchor_t *anchor, const vr_rig_t *rig, const vr_recentre_t *rc,
     const vr_pose_t *head, const vr_pose_t *pose, vr_eye_cam_t *out);
 

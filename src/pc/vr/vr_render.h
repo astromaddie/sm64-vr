@@ -46,6 +46,8 @@ void vr_render_shutdown(void);
 
 // Applied at the next stereo frame; the panel is re-placed at the next mono one.
 void vr_render_request_recentre(void);
+// The same, taking the standing height again (vr_stage_request_height).
+void vr_render_request_height(void);
 
 // One XR frame. `renders` is false in standby: nothing is drawn and `layers`
 // comes back empty. Fills `layers` with what to submit.

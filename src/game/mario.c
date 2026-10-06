@@ -40,6 +40,10 @@
 #include "hardcoded.h"
 #include "pc/configfile.h"
 #include "pc/network/network.h"
+#ifdef SM64_VR
+#include "pc/vr/vr_game.h"
+#include "pc/vr/vr_turn.h"
+#endif
 #include "pc/lua/smlua.h"
 #include "pc/network/socket/socket.h"
 #include "bettercamera.h"
@@ -1524,6 +1528,14 @@ void update_mario_joystick_inputs(struct MarioState *m) {
     if (m->intendedMag > 0.0f) {
         if (gLakituState.mode != CAMERA_MODE_NEWCAM) {
             m->intendedYaw = atan2s(-controller->stickY, controller->stickX) + m->area->camera->yaw;
+#ifdef SM64_VR
+            // In stereo play the stick is relative to what the wearer sees: the
+            // camera's yaw, plus a comfort turn not yet taken by the camera,
+            // plus the head's (or a hand's) yaw (move_relative)
+            if (gVrCamTurn.move_active && !get_first_person_enabled()) {
+                m->intendedYaw += vr_turn_angle_s16(gVrCamTurn.move_yaw + gVrCamTurn.queued);
+            }
+#endif
         } else if (get_first_person_enabled()) {
             m->intendedYaw = atan2s(-controller->stickY, controller->stickX) + gLakituState.yaw;
         } else {

@@ -5,6 +5,7 @@
 
 #include "vr_input.h"
 #include "vr_log.h"
+#include "vr_math.h"
 #include "vr_xr.h"
 
 // -----------------------------------------------------------------------------
@@ -12,6 +13,9 @@
 
 static vr_gamepad_t sPad;
 static bool sRecentreRequested = false;
+static bool sHeightRequested = false;
+static float sHandYaw[2];
+static bool sHandValid[2];
 static sfvr_haptic_queue sHaptics;
 
 static struct {
@@ -34,6 +38,24 @@ bool vr_take_recentre_request(void) {
     bool r = sRecentreRequested;
     sRecentreRequested = false;
     return r;
+}
+
+void vr_request_height(void) {
+    sHeightRequested = true;
+}
+
+bool vr_take_height_request(void) {
+    bool r = sHeightRequested;
+    sHeightRequested = false;
+    return r;
+}
+
+bool vr_input_hand_yaw(int hand, float *yaw) {
+    if (hand < 0 || hand > 1 || !sHandValid[hand]) {
+        return false;
+    }
+    *yaw = sHandYaw[hand];
+    return true;
 }
 
 void vr_haptic_rumble_play(float strength, float seconds) {
@@ -76,9 +98,13 @@ unsigned vr_pad_map(vr_pad_t *pad, const vr_pad_sample_t *s, double now_s, vr_ga
     if (events & SFVR_VIEW_SHORT_PRESS) {
         pad->back_reads_left = 2;
     }
-    if (events & (SFVR_VIEW_RECENTRE | SFVR_VIEW_RECALIBRATE_HEIGHT)) {
-        // No standing height in a third-person game: 3 s recentres again
+    if (events & SFVR_VIEW_RECENTRE) {
         vr_request_recentre();
+        sfvr_haptic_event(&sHaptics, SFVR_HAND_BOTH, SFVR_HAPTIC_SYSTEM);
+    }
+    if (events & SFVR_VIEW_RECALIBRATE_HEIGHT) {
+        // The standing height the head's height is measured from (vr_stage.h)
+        vr_request_height();
         sfvr_haptic_event(&sHaptics, SFVR_HAND_BOTH, SFVR_HAPTIC_SYSTEM);
     }
 
@@ -151,6 +177,8 @@ enum {
     ACT_R_STICK,
     ACT_HAPTIC_LEFT,
     ACT_HAPTIC_RIGHT,
+    ACT_L_AIM,
+    ACT_R_AIM,
     ACT_COUNT
 };
 
@@ -171,14 +199,16 @@ static const struct {
     [ACT_R_STICK_PRESS] = { "r_stick_press", "Right stick click", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_DPAD_UP] = { "dpad_up", "D-pad up", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_DPAD_DOWN] = { "dpad_down", "D-pad down", XR_ACTION_TYPE_BOOLEAN_INPUT },
-    [ACT_DPAD_LEFT] = { "dpad_left", "D-pad left", XR_ACTION_TYPE_BOOLEAN_INPUT },
-    [ACT_DPAD_RIGHT] = { "dpad_right", "D-pad right", XR_ACTION_TYPE_BOOLEAN_INPUT },
+    [ACT_DPAD_LEFT] = { "dpad_left", "D-pad left (C left)", XR_ACTION_TYPE_BOOLEAN_INPUT },
+    [ACT_DPAD_RIGHT] = { "dpad_right", "D-pad right (C right)", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_L_TRIGGER] = { "l_trigger", "Left trigger (Z)", XR_ACTION_TYPE_FLOAT_INPUT },
     [ACT_R_TRIGGER] = { "r_trigger", "Right trigger (R)", XR_ACTION_TYPE_FLOAT_INPUT },
     [ACT_L_STICK] = { "l_stick", "Left stick (move)", XR_ACTION_TYPE_VECTOR2F_INPUT },
-    [ACT_R_STICK] = { "r_stick", "Right stick (C buttons)", XR_ACTION_TYPE_VECTOR2F_INPUT },
+    [ACT_R_STICK] = { "r_stick", "Right stick (turn; C up, C down)", XR_ACTION_TYPE_VECTOR2F_INPUT },
     [ACT_HAPTIC_LEFT] = { "haptic_left", "Haptics (left)", XR_ACTION_TYPE_VIBRATION_OUTPUT },
-    [ACT_HAPTIC_RIGHT] = { "haptic_right", "Haptics (right)", XR_ACTION_TYPE_VIBRATION_OUTPUT }
+    [ACT_HAPTIC_RIGHT] = { "haptic_right", "Haptics (right)", XR_ACTION_TYPE_VIBRATION_OUTPUT },
+    [ACT_L_AIM] = { "l_aim", "Left hand (move_relative)", XR_ACTION_TYPE_POSE_INPUT },
+    [ACT_R_AIM] = { "r_aim", "Right hand (move_relative)", XR_ACTION_TYPE_POSE_INPUT }
 };
 
 typedef struct {
@@ -217,7 +247,9 @@ static const binding_t frame_bindings[] = {
     { ACT_DPAD_LEFT, L_ "input/dpad_left/click" },
     { ACT_DPAD_RIGHT, L_ "input/dpad_right/click" },
     { ACT_HAPTIC_LEFT, L_ "output/haptic" },
-    { ACT_HAPTIC_RIGHT, R_ "output/haptic" }
+    { ACT_HAPTIC_RIGHT, R_ "output/haptic" },
+    { ACT_L_AIM, L_ "input/aim/pose" },
+    { ACT_R_AIM, R_ "input/aim/pose" }
 };
 
 // Index: no View, no Menu, no bumpers, no D-pad. The grips are the bumpers,
@@ -236,7 +268,9 @@ static const binding_t index_bindings[] = {
     { ACT_VIEW, L_ "input/a/click" },
     { ACT_L_STICK_PRESS, L_ "input/thumbstick/click" },
     { ACT_HAPTIC_LEFT, L_ "output/haptic" },
-    { ACT_HAPTIC_RIGHT, R_ "output/haptic" }
+    { ACT_HAPTIC_RIGHT, R_ "output/haptic" },
+    { ACT_L_AIM, L_ "input/aim/pose" },
+    { ACT_R_AIM, R_ "input/aim/pose" }
 };
 
 // Touch: left X is X, left Y stands in for View, the left Menu button is Menu.
@@ -255,7 +289,9 @@ static const binding_t touch_bindings[] = {
     { ACT_L_STICK_PRESS, L_ "input/thumbstick/click" },
     { ACT_R_STICK_PRESS, R_ "input/thumbstick/click" },
     { ACT_HAPTIC_LEFT, L_ "output/haptic" },
-    { ACT_HAPTIC_RIGHT, R_ "output/haptic" }
+    { ACT_HAPTIC_RIGHT, R_ "output/haptic" },
+    { ACT_L_AIM, L_ "input/aim/pose" },
+    { ACT_R_AIM, R_ "input/aim/pose" }
 };
 
 #define COUNT_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -284,6 +320,7 @@ int vr_input_profiles(const vr_input_profile_paths_t **out) {
 struct vr_input {
     XrActionSet set;
     XrAction action[ACT_COUNT];
+    XrSpace aim_space[2]; // the hands' aim poses (move_relative); XR_NULL_HANDLE when unavailable
     vr_pad_t pad;
     bool active; // the last update had focus
 };
@@ -375,6 +412,29 @@ vr_input_t *vr_input_create(struct vr_xr *xr) {
         return NULL;
     }
 
+    // The hands' aim poses, for move_relative = left/right. Optional: the
+    // function comes from the runtime directly (it is not in the host's table)
+    PFN_xrCreateActionSpace create_action_space = NULL;
+    if (xr->api.get_instance_proc_addr) {
+        xr->api.get_instance_proc_addr(xr->instance, "xrCreateActionSpace", (PFN_xrVoidFunction *)&create_action_space);
+    }
+    for (int hand = 0; hand < 2; hand++) {
+        in->aim_space[hand] = XR_NULL_HANDLE;
+        if (!create_action_space || !xr->api.locate_space) {
+            continue;
+        }
+        XrActionSpaceCreateInfo sci = {
+            .type = XR_TYPE_ACTION_SPACE_CREATE_INFO,
+            .action = in->action[hand == 0 ? ACT_L_AIM : ACT_R_AIM],
+            .subactionPath = XR_NULL_PATH,
+            .poseInActionSpace = { .orientation = { 0, 0, 0, 1 }, .position = { 0, 0, 0 } }
+        };
+        if (XR_FAILED(create_action_space(xr->session, &sci, &in->aim_space[hand]))) {
+            in->aim_space[hand] = XR_NULL_HANDLE;
+            vr_logf("input: no aim pose space for the %s hand", hand == 0 ? "left" : "right");
+        }
+    }
+
     sPadState = &in->pad;
     vr_logf("input: action set attached (%d actions, %d profiles%s)", ACT_COUNT, suggested,
         xr->ext_frame_controller ? ", frame first" : ", no frame profile");
@@ -387,6 +447,12 @@ void vr_input_destroy(vr_input_t *in, struct vr_xr *xr) {
     }
     vr_pad_release(&in->pad, &sPad);
     sPadState = NULL;
+    for (int hand = 0; hand < 2; hand++) {
+        if (in->aim_space[hand] != XR_NULL_HANDLE && xr->api.destroy_space) {
+            xr->api.destroy_space(in->aim_space[hand]);
+        }
+        sHandValid[hand] = false;
+    }
     if (in->set != XR_NULL_HANDLE) {
         xr->api.destroy_action_set(in->set);
     }
@@ -489,6 +555,7 @@ void vr_input_update(vr_input_t *in, struct vr_xr *xr, float haptics) {
     if (!live) {
         // Focus loss or session stop: the game sees every input released, nothing
         // buzzes, and a held View press does not count
+        sHandValid[0] = sHandValid[1] = false;
         vr_pad_release(&in->pad, &sPad);
         sfvr_haptic_queue_clear(&sHaptics);
         sRumble.on = false;
@@ -502,6 +569,21 @@ void vr_input_update(vr_input_t *in, struct vr_xr *xr, float haptics) {
 
     double now_s = (double)xr->frame.predicted_display_time * 1e-9;
     vr_pad_map(&in->pad, &sample, now_s, &sPad);
+
+    // The hands' aim yaws (move_relative)
+    for (int hand = 0; hand < 2; hand++) {
+        sHandValid[hand] = false;
+        if (in->aim_space[hand] == XR_NULL_HANDLE || xr->local_space == XR_NULL_HANDLE) {
+            continue;
+        }
+        XrSpaceLocation loc = { .type = XR_TYPE_SPACE_LOCATION };
+        if (XR_SUCCEEDED(xr->api.locate_space(in->aim_space[hand], xr->local_space, xr->frame.predicted_display_time, &loc))
+            && (loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+            const float q[4] = { loc.pose.orientation.x, loc.pose.orientation.y, loc.pose.orientation.z, loc.pose.orientation.w };
+            sHandYaw[hand] = vr_yaw_of(q);
+            sHandValid[hand] = true;
+        }
+    }
 
     // The game's rumble as 40 ms pulses on both hands while it lasts
     if (sRumble.on) {
