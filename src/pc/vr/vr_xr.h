@@ -167,6 +167,16 @@ typedef struct vr_xr {
 // Pure: the swapchain size for a recommended and a maximum size, scaled and clamped to 1..max.
 uint32_t vr_xr_scaled_size(uint32_t recommended, uint32_t max, float scale);
 
+// The Frame's default recommended eye size. Eyes are sized from it, not from
+// the runtime's recommendation, because SteamVR's per-app resolution changes
+// the recommendation (2160 when set to 2160) and 1.25 x 2160 overshoots to
+// 2700 px (lesson 97 in the port playbook). resolution_scale 1.25 = 2160 px.
+#define VR_EYE_BASE_PX 1728u
+
+// The base size of one eye dimension: VR_EYE_BASE_PX along the longer side of
+// the runtime's recommended rectangle, keeping its aspect (pure; tests/vr)
+uint32_t vr_xr_eye_base(uint32_t dim, uint32_t rec_w, uint32_t rec_h);
+
 // Pure: picks the rate to request from the enumerated ones: the nearest to
 // `wanted`, the lower one on a tie. 0 when there are none.
 int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted);

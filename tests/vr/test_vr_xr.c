@@ -552,6 +552,12 @@ static void test_pure_helpers(void) {
 	CHECK_INT(vr_xr_scaled_size(1728, 8192, 0.0f), 1728); // a bad scale means 1
 	CHECK_INT(vr_xr_scaled_size(1, 8192, 0.75f), 1);
 	CHECK_INT(vr_xr_scaled_size(0, 8192, 1.0f), 1);
+	// Eyes come from the Frame's base size, whatever SteamVR's per-app resolution recommends
+	CHECK_INT(vr_xr_eye_base(1728, 1728, 1728), 1728);
+	CHECK_INT(vr_xr_eye_base(2160, 2160, 2160), 1728);
+	CHECK_INT(vr_xr_scaled_size(vr_xr_eye_base(2160, 2160, 2160), 8192, 1.25f), 2160);
+	CHECK_INT(vr_xr_eye_base(1000, 2000, 1000), 864); // aspect kept
+	CHECK_INT(vr_xr_eye_base(0, 0, 0), 1728);
 
 	float rates[] = { 72, 90, 144 };
 	CHECK_INT(vr_xr_choose_refresh_rate(rates, 3, 90), 90);

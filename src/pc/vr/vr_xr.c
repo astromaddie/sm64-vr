@@ -54,6 +54,14 @@ uint32_t vr_xr_scaled_size(uint32_t recommended, uint32_t max, float scale) {
 	return (uint32_t)scaled;
 }
 
+uint32_t vr_xr_eye_base(uint32_t dim, uint32_t rec_w, uint32_t rec_h) {
+	uint32_t longer = rec_w > rec_h ? rec_w : rec_h;
+	if (longer == 0) {
+		return VR_EYE_BASE_PX;
+	}
+	return (uint32_t)floor((double)VR_EYE_BASE_PX * (double)dim / (double)longer + 0.5);
+}
+
 int vr_xr_choose_refresh_rate(const float *rates, uint32_t count, int wanted) {
 	int best = 0;
 	float best_distance = 0;
@@ -381,8 +389,9 @@ bool vr_xr_session_create(vr_xr_t *xr, const void *graphics_binding) {
 	}
 
 	for (int e = 0; e < 2; e++) {
-		uint32_t w = vr_xr_scaled_size(xr->eye_recommended[e][0], xr->eye_max[e][0], xr->config.resolution_scale);
-		uint32_t h = vr_xr_scaled_size(xr->eye_recommended[e][1], xr->eye_max[e][1], xr->config.resolution_scale);
+		uint32_t rw = xr->eye_recommended[e][0], rh = xr->eye_recommended[e][1];
+		uint32_t w = vr_xr_scaled_size(vr_xr_eye_base(rw, rw, rh), xr->eye_max[e][0], xr->config.resolution_scale);
+		uint32_t h = vr_xr_scaled_size(vr_xr_eye_base(rh, rw, rh), xr->eye_max[e][1], xr->config.resolution_scale);
 		if (!vr_xr_swapchain_create(xr, &xr->eye[e], w, h)) {
 			return false;
 		}

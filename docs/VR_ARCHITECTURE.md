@@ -47,10 +47,14 @@ launches.
   `resolution_scale`). Standby, taking the headset off and a rate change start the count over.
   `diag_rate_unworn = true` counts windows without a wearer, for unattended runs. Each window otherwise
   logs `refresh rate: N fps over 10 s at R Hz`.
-- **Resolution.** Each eye has its own swapchain, created at the runtime's recommended size times
-  `resolution_scale` and rendered into directly: the replay binds the swapchain image as its framebuffer.
-  There is no larger intermediate target and no blit. The Frame recommends 1728 x 1728, so the default
-  `resolution_scale = 1.25` gives 2160 x 2160, the panel's own resolution. The log has one `eye N
+- **Resolution.** Each eye has its own swapchain, created at 1728 px (the Frame's default
+  recommendation, `VR_EYE_BASE_PX`, keeping the recommended aspect) times `resolution_scale`, and
+  rendered into directly: the replay binds the swapchain image as its framebuffer. There is no larger
+  intermediate target and no blit. The default `resolution_scale = 1.25` gives 2160 x 2160, the panel's
+  own resolution. The base is fixed rather than the runtime's recommendation because SteamVR's per-app
+  resolution changes the recommendation: with the per-app resolution at 2160 it recommends 2160, and
+  1.25 times that would be 2700 px (DK64 ran at exactly 60 Hz that way; playbook lesson 97). So the
+  per-app resolution doesn't size this game's eyes; `resolution_scale` does. The log has one `eye N
   swapchain WxH` line per eye with the recommended and maximum sizes. No MSAA, no foveation.
 - **Settings and migration.** Both keys are in `vr.toml` (`SM64_VR_REFRESH_RATE`,
   `SM64_VR_RESOLUTION_SCALE` override them for a run). Schema version 2 changed the defaults from 90 Hz

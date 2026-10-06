@@ -192,9 +192,9 @@ bool vr_init(void *sdl_window) {
 
     vr_logf("session created: swapchain format 0x%llx (%s)", (long long)vr.xr.color_format, vr.xr.color_srgb ? "sRGB" : "linear RGBA8");
     for (int e = 0; e < 2; e++) {
-        vr_logf("eye %d swapchain %ux%u (runtime recommends %ux%u, maximum %ux%u, resolution_scale %.2f); the game renders into it directly",
-            e, vr.xr.eye[e].width, vr.xr.eye[e].height, vr.xr.eye_recommended[e][0], vr.xr.eye_recommended[e][1],
-            vr.xr.eye_max[e][0], vr.xr.eye_max[e][1], config.resolution_scale);
+        vr_logf("eye %d swapchain %ux%u (%u px base x resolution_scale %.2f; runtime recommends %ux%u, maximum %ux%u); the game renders into it directly",
+            e, vr.xr.eye[e].width, vr.xr.eye[e].height, VR_EYE_BASE_PX, config.resolution_scale,
+            vr.xr.eye_recommended[e][0], vr.xr.eye_recommended[e][1], vr.xr.eye_max[e][0], vr.xr.eye_max[e][1]);
     }
     if (vr.xr.color_format != VR_GL_SRGB8_ALPHA8 && vr.xr.color_format != VR_GL_RGBA8) {
         vr_logf("WARNING: the swapchain format has no alpha channel, so the HUD quad cannot be translucent");
