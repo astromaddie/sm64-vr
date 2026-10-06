@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -430,6 +431,119 @@ static void test_set(void) {
 	vr_settings_free(&s);
 }
 
+static const char *env_override(const char *name) {
+	return strcmp(name, "SM64_VR_SNAP_ANGLE") == 0 ? "60" : NULL;
+}
+
+// The in-headset page's path: set (clamped, reporting a change), reset, an environment override
+// that ends when the key is set, and a save that reads back
+static void test_runtime_set_save_reload(void) {
+	char dir[] = "/tmp/vr_settings_rt_XXXXXX";
+	CHECK(mkdtemp(dir) != NULL);
+	char path[512];
+	snprintf(path, sizeof(path), "%s/vr.toml", dir);
+
+	vr_settings_t s;
+	CHECK(vr_settings_load(&s, path));
+
+	// the return value says whether anything changed
+	CHECK(vr_settings_set(&s, "haptics", 0.25));
+	CHECK(!vr_settings_set(&s, "haptics", 0.25));
+	CHECK(!vr_settings_set(&s, "nonsense", 1));
+	CHECK_NEAR(get(&s, "haptics"), 0.25, 1e-6);
+
+	// clamping and rounding by type, and clamp() agrees with set()
+	CHECK_NEAR(vr_settings_clamp("haptics", 5), 1.0, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("haptics", -5), 0.0, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("snap_angle", 44.6), 45, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("snap_angle", 5), 15, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("turn_mode", 1.4), 1, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("turn_mode", 7), 2, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("seated", 0.2), 1, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("seated", 0), 0, 1e-9);
+	CHECK_NEAR(vr_settings_clamp("snap_angle", NAN), 30, 1e-9); // NaN gives the default
+	CHECK_NEAR(vr_settings_clamp("haptics", NAN), 0.6, 1e-6);
+	CHECK_NEAR(vr_settings_clamp("nonsense", 3.5), 3.5, 1e-9);
+	CHECK(vr_settings_set(&s, "resolution_scale", 9));
+	CHECK_NEAR(get(&s, "resolution_scale"), 1.5, 1e-6);
+	CHECK(!vr_settings_set(&s, "resolution_scale", 1.5)); // already there after the clamp
+	CHECK(vr_settings_set(&s, "world_scale", 161.0 / 1.55));
+	CHECK_NEAR(get(&s, "world_scale"), 161.0 / 1.55, 1e-3);
+
+	// reset goes back to the registry default
+	CHECK_NEAR(vr_settings_default("hud_scale"), 100, 1e-9);
+	CHECK_NEAR(vr_settings_default("nonsense"), 0, 1e-9);
+	vr_settings_set(&s, "hud_scale", 150);
+	CHECK(vr_settings_reset(&s, "hud_scale"));
+	CHECK_NEAR(get(&s, "hud_scale"), 100, 1e-9);
+	CHECK(!vr_settings_reset(&s, "hud_scale"));
+
+	// every kind of key, set and saved
+	vr_settings_set(&s, "turn_mode", 1);
+	vr_settings_set(&s, "snap_angle", 45);
+	vr_settings_set(&s, "vignette", 1);
+	vr_settings_set(&s, "dominant_hand", 1);
+	vr_settings_set(&s, "refresh_rate", 90);
+	CHECK(vr_settings_save(&s));
+	vr_settings_free(&s);
+
+	char tmp[600];
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	CHECK(access(tmp, F_OK) != 0);
+	char *text = read_all(path);
+	CHECK(has(text, "turn_mode = \"smooth\"\n"));
+	CHECK(has(text, "snap_angle = 45\n"));
+	CHECK(has(text, "vignette = true\n"));
+	CHECK(has(text, "dominant_hand = \"left\"\n"));
+	CHECK(has(text, "refresh_rate = 90\n"));
+	CHECK(has(text, "resolution_scale = 1.5\n"));
+	free(text);
+
+	// reload: the same values, and the file is already complete, so it is not rewritten
+	struct stat before, after;
+	CHECK(stat(path, &before) == 0);
+	CHECK(vr_settings_load(&s, path));
+	CHECK(stat(path, &after) == 0);
+	CHECK(before.st_ino == after.st_ino);
+	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "snap_angle"), 45, 1e-9);
+	CHECK_NEAR(get(&s, "vignette"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "dominant_hand"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "refresh_rate"), 90, 1e-9);
+	CHECK_NEAR(get(&s, "resolution_scale"), 1.5, 1e-6);
+	CHECK_NEAR(get(&s, "world_scale"), 161.0 / 1.55, 1e-3);
+	CHECK_NEAR(get(&s, "haptics"), 0.25, 1e-6);
+	CHECK_NEAR(get(&s, "hud_scale"), 100, 1e-9);
+
+	// an environment override is not written back, and ends when the key is set
+	vr_settings_set(&s, "snap_angle", 15);
+	vr_settings_set(&s, "haptics", 0.5);
+	CHECK(vr_settings_save(&s));
+	vr_settings_free(&s);
+	write_all(path, "version = 2\n[vr]\nsnap_angle = 45\n");
+	CHECK(vr_settings_load(&s, path));
+	CHECK(vr_settings_apply_env(&s, env_override) == 1);
+	CHECK_NEAR(get(&s, "snap_angle"), 60, 1e-9); // the run's value
+	CHECK_NEAR(file_value(&s, "snap_angle"), 45, 1e-9); // the file's
+	vr_settings_set(&s, "haptics", 0.7); // another key changes and saves
+	CHECK(vr_settings_save(&s));
+	text = read_all(path);
+	CHECK(has(text, "snap_angle = 45\n")); // not 60
+	CHECK(has(text, "haptics = 0.7\n"));
+	free(text);
+	vr_settings_set(&s, "snap_angle", 90); // set it on the page: the page wins
+	CHECK_NEAR(get(&s, "snap_angle"), 90, 1e-9);
+	CHECK(vr_settings_save(&s));
+	text = read_all(path);
+	CHECK(has(text, "snap_angle = 90\n"));
+	free(text);
+	vr_settings_free(&s);
+
+	char cmd[700];
+	snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+	CHECK(system(cmd) == 0);
+}
+
 static void test_load_and_save_files(void) {
 	char dir[] = "/tmp/vr_settings_test_XXXXXX";
 	CHECK(mkdtemp(dir) != NULL);
@@ -522,6 +636,7 @@ int main(void) {
 	RUN(test_env_overrides);
 	RUN(test_migration_to_schema_2);
 	RUN(test_set);
+	RUN(test_runtime_set_save_reload);
 	RUN(test_load_and_save_files);
 	return SFVR_TEST_RESULT("vr_settings");
 }
