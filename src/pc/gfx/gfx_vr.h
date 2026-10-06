@@ -51,6 +51,7 @@ struct GfxVrPass {
     void (*world_proj)(const float game_proj[16], float out[16], void *user);
     void *user;
     float sky_proj[16]; // EYE: the projection of the VR sky segment (Mat4 memory)
+    const float *sky_proj_live; // optional: refreshed by world_proj for interpolated cinema FOVs
 };
 
 struct GfxVrPassStats {

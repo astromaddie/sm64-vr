@@ -1,3 +1,8 @@
+// fileno and fsync for the atomic save
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -23,6 +28,13 @@ static const sfvr_setting_key port_keys[] = {
 	{ "star_select_scale", SFVR_SETTING_FLOAT, 300.0, 10.0, 2000.0, NULL },
 	// Show the whole frame on the mono panel, even in gameplay.
 	{ "force_mono", SFVR_SETTING_BOOL, 0.0, 0.0, 1.0, NULL },
+	// Scripted cameras: stereo depth inside a world-locked screen by default.
+	{ "cutscenes", SFVR_SETTING_INT, 0.0, 0.0, 1.0, NULL },
+	{ "cinema_distance", SFVR_SETTING_FLOAT, 3.0, 1.0, 10.0, NULL },
+	{ "cinema_width", SFVR_SETTING_FLOAT, 3.6, 0.5, 10.0, NULL },
+	// Starts on the first available world camera (including the main-menu
+	// background), using predicted display time. 0 disables the diagnostic.
+	{ "diag_cinema_seconds", SFVR_SETTING_FLOAT, 0.0, 0.0, 120.0, NULL },
 	// An inverted view fov from the runtime (vr_xr.h): 0 = as given,
 	// 1 = negate all four angles, 2 = swap left/right and up/down,
 	// 3 = always the Frame's full fov measured by the earlier ports (default;

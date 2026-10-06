@@ -20,7 +20,9 @@ uint32_t vr_compose_layers(vr_compose_t *c, const vr_xr_t *xr, const vr_layers_t
 	const vr_swapchain_t *hud, const vr_swapchain_t *panel, const vr_swapchain_t *fade
 ) {
 	c->count = 0;
-	if (!l) {
+	if (!l || !l->projection) {
+		// Never submit quads over the runtime's default environment. Standby
+		// and an eye acquisition failure submit no layers at all.
 		return 0;
 	}
 

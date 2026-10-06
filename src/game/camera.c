@@ -39,6 +39,15 @@
 #include "first_person_cam.h"
 #include "rendering_graph_node.h"
 
+#ifdef SM64_VR
+#include "pc/vr/vr_game.h"
+#include "pc/vr/vr_cinema.h"
+#define VR_CAMERA_ID_CHECK(name, id, cinema, why) \
+    _Static_assert(CUTSCENE_##name == id, "VR cutscene id differs from camera.h");
+VR_CINEMA_CUTSCENES(VR_CAMERA_ID_CHECK)
+#undef VR_CAMERA_ID_CHECK
+#endif
+
 #define CBUTTON_MASK (U_CBUTTONS | D_CBUTTONS | L_CBUTTONS | R_CBUTTONS)
 
 static u8 sSoftResettingCamera = FALSE;
@@ -3796,6 +3805,15 @@ Gfx *geo_camera_main(s32 callContext, struct GraphNode *g, void *context) {
             break;
         case GEO_CONTEXT_RENDER:
             update_graph_node_camera(gc);
+#ifdef SM64_VR
+            // Publish facts alongside the camera used by this display list.
+            // No simulation, camera mode or cutscene timing is changed here.
+            gVrTick.cutscene = gCamera ? gCamera->cutscene : 0;
+            gVrTick.camera_mode = gCamera ? gCamera->mode : 0;
+            gVrTick.cutscene_timer = gCutsceneTimer;
+            gVrTick.cutscene_shot = sCutsceneShot;
+            gVrTick.camera_fov = gFOVState.fov;
+#endif
             break;
     }
     return NULL;

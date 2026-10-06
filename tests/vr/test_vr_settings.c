@@ -1,3 +1,8 @@
+// strdup and mkdtemp
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +75,7 @@ static void test_registry(void) {
 		"world_scale", "level_pitch", "star_select_scale", "fov_mode", "diag_rate_unworn",
 		"follow_vehicle_rotation", "horizon_lock", "hud_mode", "hud_distance", "hud_scale",
 		"force_mono", "panel_distance", "panel_width",
+		"cutscenes", "cinema_distance", "cinema_width", "diag_cinema_seconds",
 		"resolution_scale", "refresh_rate", "probe_seconds", "force_render", "diag_yaw", "dump_frame", "timing",
 		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand"
 	};
@@ -79,7 +85,7 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 10);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 14);
 
 	// env names
 	char name[64];

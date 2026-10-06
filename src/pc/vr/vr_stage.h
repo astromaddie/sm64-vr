@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "vr_cam.h"
+#include "vr_cinema.h"
 #include "vr_math.h"
 #include "vr_settings.h"
 #include "vr_types.h"
@@ -26,6 +27,9 @@ typedef struct {
 	bool diag_menu_stereo; // the main menu's background level renders in stereo
 	float panel_distance;
 	float panel_width;
+	int cutscenes; // 0 cinema_3d, 1 immersive
+	float cinema_distance, cinema_width;
+	float diag_cinema_seconds; // force cinema on the first available 3D scene
 	float diag_yaw; // radians
 	int dump_frame; // 0 = off
 	int dump_worn_frame; // 0 = off; counts stereo frames from tracked views only
@@ -42,8 +46,11 @@ void vr_render_settings_from(vr_render_settings_t *out, const vr_settings_t *s);
 typedef enum {
 	VR_MODE_NONE, // before the first frame
 	VR_MODE_MONO, // the game's own camera and projection, replayed once into the world-locked panel
-	VR_MODE_STEREO // gameplay: eyes into the projection layer, 2D into the HUD quad
+	VR_MODE_STEREO, // gameplay: eyes into the projection layer, 2D into the HUD quad
+	VR_MODE_CINEMA // scripted game-camera stereo on a world-locked projection screen
 } vr_mode_t;
+
+const char *vr_mode_name(vr_mode_t mode);
 
 // What one frame submits to the compositor. Poses are LOCAL space, metres.
 typedef struct {
@@ -74,6 +81,8 @@ typedef struct {
 	vr_recentre_t recentre;
 	bool panel_valid;
 	vr_pose_t panel_pose;
+	bool cinema_valid, cinema_pending;
+	vr_cinema_screen_t cinema_screen;
 	bool fade_active;
 	int64_t fade_start_ns;
 	uint32_t mode_switches;
@@ -98,6 +107,11 @@ bool vr_stage_apply_recentre(vr_stage_t *s, const vr_view_t views[2]);
 // pending, then fixed in the world. With no head pose yet it is straight ahead
 // of the origin.
 void vr_stage_panel_pose(vr_stage_t *s, const vr_view_t views[2], bool views_valid, float distance, vr_pose_t *out);
+
+// Anchors only on entry/recentre. Mid-cutscene camera cuts never call this a
+// mode change, and neither the game camera nor a comfort turn moves the screen.
+void vr_stage_cinema_screen(vr_stage_t *s, const vr_view_t views[2], float distance, float width,
+	vr_cinema_screen_t *out);
 
 // The transition fade's alpha for this frame's display time; 0 once it is over.
 float vr_stage_fade_alpha(vr_stage_t *s, int64_t now_ns);

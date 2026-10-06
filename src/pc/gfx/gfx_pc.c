@@ -727,7 +727,7 @@ static void gfx_vr_marker(uint32_t segment) {
     }
     if (sVrPass.kind == GFX_VR_PASS_EYE && sVrSeg == GFX_VR_SEG_SKY_VR) {
         // The sky's vertices are directions in world axes: the eye's rotation only
-        memcpy(rsp.P_matrix, sVrPass.sky_proj, sizeof(rsp.P_matrix));
+        memcpy(rsp.P_matrix, sVrPass.sky_proj_live ? sVrPass.sky_proj_live : sVrPass.sky_proj, sizeof(rsp.P_matrix));
         sVrWorldProj = false;
         mtxf_identity(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
         mtxf_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
