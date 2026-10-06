@@ -111,8 +111,11 @@ camera instead, in one step:
 The game camera's own turns (C buttons, walls, cuts, the radial camera following Mario) are not
 compensated; they show as the game makes them, as before. Which camera takes a turn
 (`vr_turn_kind`): the Lakitu and Mario cameras that trail Mario (free roam, close, Mario cam), the
-radial cameras within the game's own 120 degree bound on `sModeOffsetYaw` (a snap is cut at the bound,
-or dropped when less than 5 degrees is left, and logged), and the 8-direction camera. Authored cameras
+radial cameras within the game's own 120 degree bound on `sModeOffsetYaw` (60 degrees for the outward
+radial cameras of Tick Tock Clock, Dire Dire Docks and the volcano, which pull anything further back at about
+84 degrees a second; a snap is cut at the bound, or dropped when less than 5 degrees is left, and logged),
+and the 8-direction camera. When Mario runs, the radial camera's own rule eases an offset past 60 degrees
+back to 60, as it does after the C buttons. Authored cameras
 (boss, fixed, path, slide, stairs), the ones that follow Mario's facing (swimming, flying, the cannon),
 C-up, the free and rom-hack cameras, cutscenes, pause, mode transitions and a radial C-button swing in
 progress take none: the stick does nothing then. The Lakitu camera normally swings back behind an idle

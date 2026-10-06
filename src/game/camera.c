@@ -3053,7 +3053,7 @@ void set_camera_mode(struct Camera *c, s16 mode, s16 frames) {
 }
 
 #ifdef SM64_VR
-enum VrTurnKind { VR_TURN_KIND_NONE, VR_TURN_KIND_DEFAULT, VR_TURN_KIND_RADIAL, VR_TURN_KIND_8DIR };
+enum VrTurnKind { VR_TURN_KIND_NONE, VR_TURN_KIND_DEFAULT, VR_TURN_KIND_RADIAL, VR_TURN_KIND_OUTWARD, VR_TURN_KIND_8DIR };
 
 // Which of the game camera's own states a VR comfort turn is handed to
 // (docs/VR_ARCHITECTURE.md section 4): the Lakitu and Mario cameras that
@@ -3097,7 +3097,7 @@ static s32 vr_turn_kind(struct Camera *c) {
             if (gCameraMovementFlags & (CAM_MOVING_INTO_MODE | CAM_MOVE_ROTATE)) {
                 return VR_TURN_KIND_NONE;
             }
-            return VR_TURN_KIND_RADIAL;
+            return c->mode == CAMERA_MODE_RADIAL ? VR_TURN_KIND_RADIAL : VR_TURN_KIND_OUTWARD;
         case CAMERA_MODE_8_DIRECTIONS:
             return VR_TURN_KIND_8DIR;
         case CAMERA_MODE_CLOSE:
@@ -3110,11 +3110,16 @@ static s32 vr_turn_kind(struct Camera *c) {
 
 static void vr_turn_limits(s32 kind, f32 *left, f32 *right) {
     const f32 unit = VR_TURN_PI / 32768.f;
+    // radial_camera_move() bounds sModeOffsetYaw to +-0x5554 (120 degrees);
+    // the outward radial camera pulls anything past 60 degrees back at about
+    // 84 degrees a second even with Mario still (offset_yaw_outward_radial),
+    // so a turn stops there
+    s32 bound = kind == VR_TURN_KIND_OUTWARD ? DEGREES(60) : 0x5554;
     switch (kind) {
         case VR_TURN_KIND_RADIAL:
-            // radial_camera_move() bounds sModeOffsetYaw to +-0x5554
-            *left = (f32)(0x5554 - (s32)sModeOffsetYaw) * unit;
-            *right = (f32)((s32)sModeOffsetYaw + 0x5554) * unit;
+        case VR_TURN_KIND_OUTWARD:
+            *left = (f32)(bound - (s32)sModeOffsetYaw) * unit;
+            *right = (f32)((s32)sModeOffsetYaw + bound) * unit;
             if (*left < 0.f) { *left = 0.f; }
             if (*right < 0.f) { *right = 0.f; }
             break;
@@ -3177,7 +3182,7 @@ static void vr_camera_take_turn(struct Camera *c) {
     c->nextYaw += units;
     gLakituState.yaw += units;
     gLakituState.nextYaw += units;
-    if (kind == VR_TURN_KIND_RADIAL) {
+    if (kind == VR_TURN_KIND_RADIAL || kind == VR_TURN_KIND_OUTWARD) {
         sModeOffsetYaw += units;
     } else if (kind == VR_TURN_KIND_8DIR) {
         s8DirModeYawOffset += units;
