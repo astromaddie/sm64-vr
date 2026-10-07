@@ -748,3 +748,47 @@ and now matches the preserved active configuration; its original identity cannot
 Future runs must include every config sidecar in the pre-run snapshot. Raw current-run evidence is
 archived in the task output `sm64-live-shortcut-evidence.zip` with a SHA256 ledger. The evidence-only
 follow-up commit does not change the installed package's source identity.
+
+## Camera standard integration verification (2026-10-07)
+
+The earlier live-settings preview and grip shortcut were already delivered.
+This increment extends Mario's camera offsets in both directions with native
+surface-ray collision and aligns the existing adapter with canonical sfvr
+adjustment, range and defaults-profile behaviour.
+
+Source `4f88cc3d6574adf16c13f296929c922a7990f286` passed the existing host
+regressions, ARM64 build, ABI/dependency and 416-file package checks. The final
+independent VR-disabled baseline (`fcb49579d`) and candidate builds match:
+`f139a1287a55561ac2bd153ebf5e37e55b0516018ccb5ccc63bff5267be8f04d`.
+
+The installed `SM64VR` Steam-title executable matches
+`f0faad825816ce245ed4099dfc994ea69a6cc28d848defccb8ac833b54d59768`.
+After booking the Frame, clean-idle Steam launches captured both eyes/HUD/state
+for pause overview, the live Room page, changed scale/camera and resumed play.
+Native units/metre changed 85.088 -> 208.000 -> 85.088, closer 0.30 -> 0.44 -> 0.30;
+runtime IPD remained 0.064 m. Submitted Room panel yaw was -20.31 degrees at 2 m,
+leaving the page's inner edge about 10 degrees right of the forward view.
+The reconstructed layer montage uses untouched RGBA dumps and logged poses;
+it is an inspection aid, not a SteamVR compositor screenshot.
+
+The separate dialog diagnostic reached cutscene 162 / camera mode 11, a
+3.6 x 2.025 m cinema screen and 1.777778 picture aspect in both eyes, then
+restored camera mode 16 and stereo gameplay. The real King Whomp introduction
+remains a wear check. These synthetic-head runs had zero tracked stereo frames;
+physical grip input, tracked recentring, readability and comfort are unworn.
+
+The first attempt launched over an existing Mario process and failed in the
+unchanged OpenXR startup (invalid handle), then the flat fallback. The failed
+log/coredump is retained; the clean-idle retry passed without a source change.
+Future launch gates must stop on an active scene process. The helper restored
+the original launch arguments and user data, including configuration sidecars;
+active config and save hashes match their pre-run values.
+
+| Current increment | Evidence level |
+| --- | --- |
+| Package, integrated preview and synthetic dialog/cinema transitions | verified unattended |
+| Physical modifier, tracked recentring, panel readability, comfort, real boss introduction | not worn |
+
+Evidence: task output `device-camera-migration/SM64VR/`,
+`SM64VR-settings-composed.png`, and the cross-port delivery report. Evidence-only
+documentation commits do not change the installed package's source identity.
