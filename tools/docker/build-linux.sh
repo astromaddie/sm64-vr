@@ -10,7 +10,7 @@
 #   tests    the host unit tests (tests/vr/: scheduler, rig maths, settings, input, sfvr)
 #   package  stage the VR build as build/package/SM64VR: binary, resources, libraries, launcher
 #   abi      the ABI check on the staged package (fails above glibc 2.35)
-#   verify   prove the flat build (VR off) is what upstream's base commit gives
+#   verify   compare flat builds before/after the preview (SM64_VR_FLAT_BASELINE overrides)
 #   all      on, tests, package, abi, verify
 set -euo pipefail
 
@@ -23,6 +23,32 @@ in_container() {
 	docker run --rm -v "$repo":/src -w /src "$image" bash -c "set -euo pipefail; $1"
 }
 
+source_revision() {
+	local revision
+	revision="$(git -C "$repo" rev-parse --verify HEAD^{commit})" || {
+		echo "cannot resolve source revision on host" >&2
+		return 1
+	}
+	[[ "$revision" =~ ^[0-9a-fA-F]{40,64}$ ]] || {
+		echo "invalid source revision: $revision" >&2
+		return 1
+	}
+	printf '%s\n' "$revision"
+}
+
+source_tree_state() {
+	local status
+	status="$(git -C "$repo" status --porcelain --untracked-files=all)" || {
+		echo "cannot resolve source tree state on host" >&2
+		return 1
+	}
+	if [[ -n "$status" ]]; then
+		printf 'dirty\n'
+	else
+		printf 'clean\n'
+	fi
+}
+
 step_on() {
 	in_container "make VR=1 -j$jobs 2>&1 | grep -v 'overriding recipe\|ignoring old recipe' | tail -5; test -x build/us_pc_vr/sm64coopdx"
 }
@@ -32,7 +58,12 @@ step_tests() {
 }
 
 step_package() {
-	in_container "tools/package_linux.sh build/us_pc_vr build/package/SM64VR > /dev/null && echo staged build/package/SM64VR"
+	local revision tree
+	revision="$(source_revision)"
+	tree="$(source_tree_state)"
+	docker run --rm -v "$repo":/src -w /src \
+		-e "SOURCE_REVISION=$revision" -e "SOURCE_TREE=$tree" \
+		"$image" bash -c 'set -euo pipefail; tools/package_linux.sh build/us_pc_vr build/package/SM64VR > /dev/null && echo staged build/package/SM64VR'
 }
 
 step_abi() {
@@ -40,7 +71,7 @@ step_abi() {
 }
 
 step_verify() {
-	in_container "tools/verify_flat_build_unchanged.sh"
+	SM64_VR_IMAGE="$image" JOBS="$jobs" "$repo/tools/verify_flat_build_unchanged.sh"
 }
 
 case "$step" in

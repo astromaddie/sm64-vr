@@ -8,7 +8,7 @@ test_flags=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -DSM64_VR
     -Ithird_party/sfvr/include -Ithird_party/sfvr/tests -I/opt/openxr/include)
 test_sources=(src/pc/vr/vr_cinema.c src/pc/vr/vr_cam.c src/pc/vr/vr_math.c
     src/pc/vr/vr_stage.c src/pc/vr/vr_compose.c src/pc/vr/vr_xr.c
-    src/pc/vr/vr_settings.c src/pc/vr/vr_log.c src/pc/vr/vr_paths.c src/pc/vr/vr_turn.c
+    src/pc/vr/vr_settings.c src/pc/vr/vr_log.c src/pc/vr/vr_paths.c src/pc/vr/vr_preview.c src/pc/vr/vr_turn.c
     third_party/sfvr/src/*.c)
 for name in cinema cam math compose settings; do
     cc "${test_flags[@]}" "tests/vr/test_vr_${name}.c" "${test_sources[@]}" \

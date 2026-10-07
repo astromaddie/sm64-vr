@@ -3926,9 +3926,20 @@ void zoom_out_if_paused_and_outside(struct GraphNodeCamera *camera) {
         areaMaskIndex = 0;
         areaBit = 0;
     }
+#ifdef SM64_VR
+    // The VR settings page previews on the gameplay view: while it is open the camera
+    // stays on Lakitu's last pose (a paused game does not update it), as the player
+    // menu does in flat coopdx
+    if (gCameraMovementFlags & CAM_MOVE_PAUSE_SCREEN && !gDjuiInPlayerMenu && !get_first_person_enabled()
+        && !gVrSettingsPage.open) {
+#else
     if (gCameraMovementFlags & CAM_MOVE_PAUSE_SCREEN && !gDjuiInPlayerMenu && !get_first_person_enabled()) {
+#endif
         if (sFramesPaused >= 2) {
             if (sZoomOutAreaMasks[areaMaskIndex] & areaBit) {
+#ifdef SM64_VR
+                gVrTick.pause_overview = true;
+#endif
 
                 camera->focus[0] = gCamera->areaCenX;
                 camera->focus[1] = (sMarioCamState->pos[1] + gCamera->areaCenY) / 2;

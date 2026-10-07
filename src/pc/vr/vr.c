@@ -128,6 +128,10 @@ void vr_recentre_now(void) {
     vr_request_recentre();
 }
 
+void vr_request_dump(const char *tag) {
+    vr_render_request_dump(tag);
+}
+
 const char *vr_data_dir(void) {
     return vr_paths_runtime_data_dir();
 }

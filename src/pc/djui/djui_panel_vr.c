@@ -1,13 +1,20 @@
 #ifdef SM64_VR
 
 #include <stdio.h>
+#include <string.h>
 
 #include "djui.h"
 #include "djui_panel.h"
 #include "djui_panel_menu.h"
 #include "djui_panel_vr.h"
+#include "djui_panel_pause.h"
+#include "game/camera.h"
+#include "game/level_update.h"
 #include "pc/vr/vr.h"
+#include "pc/vr/vr_game.h"
+#include "pc/vr/vr_log.h"
 #include "pc/vr/vr_menu.h"
+#include "pc/vr/vr_preview.h"
 
 // A little wider than the game's own option panels (500 + padding): the labels carry units
 // and the page is read on the HUD quad, where DJUI's 32 px text is about 1 degree tall
@@ -37,9 +44,17 @@ static void djui_panel_vr_widen(struct DjuiThreePanel* panel) {
     djui_base_set_size(&panel->base, VR_PANEL_WIDTH, panel->base.height.value);
 }
 
-// Closing a panel (back, or the whole menu) writes what was changed
+// Closing a panel (back, or the whole menu) writes what was changed; a tab's rows go with it
 static void djui_panel_vr_destroy(UNUSED struct DjuiBase* caller) {
+    sRowCount = 0;
     vr_settings_flush();
+}
+
+// The page's first panel going (back from it, or the whole menu closing) closes the page
+static void djui_panel_vr_root_destroy(struct DjuiBase* caller) {
+    gVrSettingsPage.open = false;
+    vr_logf("settings page: closed");
+    djui_panel_vr_destroy(caller);
 }
 
 static void djui_panel_vr_slider_format(struct DjuiBase* base, unsigned int value, char* out, size_t size) {
@@ -150,8 +165,7 @@ static void djui_panel_vr_add_row(struct DjuiBase* body, size_t entry) {
     sRows[row].widget->tag = row;
 }
 
-static void djui_panel_vr_tab_create(struct DjuiBase* caller) {
-    vr_menu_tab_t tab = (vr_menu_tab_t)caller->tag;
+static void djui_panel_vr_tab_open(struct DjuiBase* caller, vr_menu_tab_t tab) {
     sRowCount = 0;
 
     struct DjuiThreePanel* panel = djui_panel_menu_create((char*)sTabShortNames[tab], false);
@@ -170,7 +184,11 @@ static void djui_panel_vr_tab_create(struct DjuiBase* caller) {
     }
 
     struct DjuiPanel* p = djui_panel_add(caller, panel, NULL);
-    p->on_panel_destroy = djui_panel_vr_destroy;
+    if (p) { p->on_panel_destroy = djui_panel_vr_destroy; }
+}
+
+static void djui_panel_vr_tab_create(struct DjuiBase* caller) {
+    djui_panel_vr_tab_open(caller, (vr_menu_tab_t)caller->tag);
 }
 
 void djui_panel_vr_create(struct DjuiBase* caller) {
@@ -189,7 +207,80 @@ void djui_panel_vr_create(struct DjuiBase* caller) {
     }
 
     struct DjuiPanel* p = djui_panel_add(caller, panel, NULL);
-    p->on_panel_destroy = djui_panel_vr_destroy;
+    if (p) {
+        p->on_panel_destroy = djui_panel_vr_root_destroy;
+        gVrSettingsPage.open = true;
+        vr_logf("settings page: open");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// diag_settings_preview: the page over the gameplay view, unattended
+
+static vr_preview_diag_t sDiag;
+static double sDiagSaved[2];
+static const char* const sDiagKeys[2] = { "world_scale", "camera_closer" };
+
+// Moves the open tab's row of `key` to the stop nearest `setting`, as the pad would
+static bool djui_panel_vr_diag_set_row(const char* key, double setting) {
+    for (int row = 0; row < sRowCount; row++) {
+        const vr_menu_entry_t* e = vr_menu_entry(sRows[row].entry);
+        if (e->key && strcmp(e->key, key) == 0 && e->widget == VR_MENU_SLIDER) {
+            sRows[row].value = (unsigned int)vr_menu_slider_stop(e, setting);
+            djui_slider_update_value(sRows[row].widget);
+            djui_panel_vr_row_changed(sRows[row].widget);
+            return true;
+        }
+    }
+    return false;
+}
+
+void djui_panel_vr_diag_tick(u16* buttons) {
+    float delay = (float)vr_setting_get("diag_settings_preview");
+    bool gameplay = gVrTick.rendered_area && gVrTick.gameplay_camera && !gVrTick.in_main_menu
+        && !gVrTick.star_select && !gVrTick.transition && !gVrTick.cutscene;
+    vr_preview_diag_step_t step = vr_preview_diag_tick(&sDiag, delay, gameplay, 1.0f / 30.0f);
+    if (step == VR_PREVIEW_DIAG_NONE) {
+        return;
+    }
+    switch (step) {
+        case VR_PREVIEW_DIAG_PAUSE:
+        case VR_PREVIEW_DIAG_RESUME:
+            *buttons |= START_BUTTON;
+            break;
+        case VR_PREVIEW_DIAG_PAUSE_MENU:
+            djui_panel_pause_create(NULL);
+            break;
+        case VR_PREVIEW_DIAG_OPEN_PAGE:
+            if (gDjuiPanelPauseCreated && !gVrSettingsPage.open) {
+                djui_panel_vr_create(NULL);
+                djui_panel_vr_tab_open(NULL, VR_TAB_ROOM);
+            }
+            break;
+        case VR_PREVIEW_DIAG_STEP:
+            for (int i = 0; i < 2; i++) { sDiagSaved[i] = vr_setting_get(sDiagKeys[i]); }
+            if (!djui_panel_vr_diag_set_row("world_scale", VR_MENU_MARIO_UNITS / 0.8)
+                || !djui_panel_vr_diag_set_row("camera_closer", 0.4)) {
+                vr_logf("settings page: diag: the Room tab is not open; nothing stepped");
+            }
+            break;
+        case VR_PREVIEW_DIAG_RESTORE:
+            // The exact values, not the nearest stops, then the rows show them
+            for (int i = 0; i < 2; i++) { vr_setting_set(sDiagKeys[i], sDiagSaved[i]); }
+            for (int row = 0; row < sRowCount; row++) { djui_panel_vr_row_refresh(row); }
+            break;
+        case VR_PREVIEW_DIAG_CLOSE:
+            if (gDjuiPanelPauseCreated) { djui_panel_shutdown(); }
+            break;
+        default:
+            break;
+    }
+    const char* tag = vr_preview_diag_dump_tag(step);
+    if (tag) { vr_request_dump(tag); }
+    vr_logf("settings page: diag: %s (play mode %d, pause camera %d, overview %d, pause menu %d, page %d, "
+        "world_scale %.1f, camera_closer %.2f)", vr_preview_diag_name(step), sCurrPlayMode,
+        (gCameraMovementFlags & CAM_MOVE_PAUSE_SCREEN) != 0, gVrTick.pause_overview, gDjuiPanelPauseCreated,
+        gVrSettingsPage.open, vr_setting_get("world_scale"), vr_setting_get("camera_closer"));
 }
 
 #endif

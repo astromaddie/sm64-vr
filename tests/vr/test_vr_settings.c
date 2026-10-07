@@ -87,7 +87,7 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 19);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 21);
 
 	// env names
 	char name[64];

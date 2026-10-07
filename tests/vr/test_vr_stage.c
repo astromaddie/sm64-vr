@@ -191,7 +191,49 @@ static void test_perf_line(void) {
 	CHECK_INT(emitted, 1); // 1000 frames at 90 Hz is 11 s: one 10 s window
 }
 
+// SM64's pause overview cut: the same black fade, no mode change and no recentre
+static void test_fade_without_mode_change(void) {
+	vr_stage_t s;
+	vr_stage_init(&s);
+	vr_view_t v[2] = { eye_at(0.3f, -0.03f), eye_at(0.3f, 0.03f) };
+	vr_stage_set_mode(&s, VR_MODE_STEREO, SEC);
+	CHECK(vr_stage_apply_recentre(&s, v));
+	vr_stage_fade_alpha(&s, 5 * SEC); // the switch's fade is over
+	uint32_t switches = s.mode_switches;
+	vr_stage_fade(&s, 10 * SEC);
+	CHECK_INT(s.mode, VR_MODE_STEREO);
+	CHECK_INT(s.mode_switches, switches);
+	CHECK(!s.recentre_pending);
+	CHECK_NEAR(vr_stage_fade_alpha(&s, 10 * SEC), 1, 1e-6);
+	CHECK_NEAR(vr_stage_fade_alpha(&s, 10 * SEC + 425000000), 0.5, 1e-3);
+	CHECK_NEAR(vr_stage_fade_alpha(&s, 10 * SEC + 700000000), 0, 1e-6);
+}
+
+// `seated` switched on: the height only, at once; the yaw and the horizontal origin stay
+static void test_take_height_only(void) {
+	vr_stage_t s;
+	vr_stage_init(&s);
+	vr_view_t v[2] = { eye_at(0.3f, -0.03f), eye_at(0.3f, 0.03f) };
+	CHECK(!vr_stage_take_height(&s, v)); // nothing to keep yet
+	vr_stage_set_mode(&s, VR_MODE_STEREO, SEC);
+	CHECK(vr_stage_apply_recentre(&s, v));
+	vr_recentre_t before = s.recentre;
+	uint32_t applied = s.recentres_applied;
+
+	// sat down, turned and moved
+	vr_view_t sat[2] = { eye_at(1.2f, 0.47f), eye_at(1.2f, 0.53f) };
+	sat[0].pose.position[1] = sat[1].pose.position[1] = 1.1f;
+	CHECK(vr_stage_take_height(&s, sat));
+	CHECK_NEAR(s.recentre.origin[1], 1.1f, 1e-5);
+	CHECK_NEAR(s.recentre.origin[0], before.origin[0], 1e-6);
+	CHECK_NEAR(s.recentre.origin[2], before.origin[2], 1e-6);
+	CHECK_NEAR(s.recentre.yaw, before.yaw, 1e-6);
+	CHECK_INT(s.recentres_applied, applied); // not a recentre: the held menu stays put
+}
+
 int main(void) {
+	RUN(test_fade_without_mode_change);
+	RUN(test_take_height_only);
 	RUN(test_fade_curve);
 	RUN(test_mode_switch_fades_and_recentres);
 	RUN(test_recentre_applies_once_at_a_stereo_frame);

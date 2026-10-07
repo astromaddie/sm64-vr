@@ -17,6 +17,7 @@
 #include "pc/configfile.h"
 #include "pc/djui/djui.h"
 #include "pc/djui/djui_panel_pause.h"
+#include "pc/djui/djui_panel_vr.h"
 
 #include "vr.h"
 #include "vr_input.h"
@@ -109,6 +110,10 @@ static void controller_vr_read(OSContPad *pad) {
         update_button(i, vp->live && vp->buttons[i]);
     }
     vr_input_pad_consumed();
+    // diag_settings_preview's Start presses (an unattended run has no controllers)
+    u16 diagButtons = 0;
+    djui_panel_vr_diag_tick(&diagButtons);
+    pad->button |= diagButtons;
     if (!vp->live) {
         return;
     }

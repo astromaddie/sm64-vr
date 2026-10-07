@@ -36,8 +36,24 @@ if find "$out" \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' -o -iname '
 	exit 1
 fi
 
-rev="$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)"
-dirty="$(git -C "$root" status --porcelain 2>/dev/null | grep -qv '^??' && echo dirty || echo clean)"
+# build-linux.sh resolves this on the host because a managed checkout's gitdir may be
+# outside the Docker bind mount. Direct invocations still resolve the mounted/local git tree.
+if [[ -n "${SOURCE_REVISION:-}" || -n "${SOURCE_TREE:-}" ]]; then
+	rev="${SOURCE_REVISION:-}"
+	dirty="${SOURCE_TREE:-}"
+else
+	rev="$(git -C "$root" rev-parse --verify HEAD^{commit})" || {
+		echo "cannot resolve source revision" >&2
+		exit 1
+	}
+	status="$(git -C "$root" status --porcelain --untracked-files=all)" || {
+		echo "cannot resolve source tree state" >&2
+		exit 1
+	}
+	if [[ -n "$status" ]]; then dirty=dirty; else dirty=clean; fi
+fi
+[[ "$rev" =~ ^[0-9a-fA-F]{40,64}$ ]] || { echo "invalid or missing source revision" >&2; exit 1; }
+[[ "$dirty" == clean || "$dirty" == dirty ]] || { echo "invalid or missing source tree state" >&2; exit 1; }
 {
 	echo "{"
 	echo "  \"title\": \"SM64VR\","

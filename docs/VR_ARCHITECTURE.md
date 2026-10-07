@@ -6,8 +6,8 @@ the `VR=1` build flag (`SM64_VR`); with the flag off the flat build is unchanged
 `vr_render.c`. The settings registry is the vendored `third_party/sfvr` plus the port keys in
 `vr_settings.c`.
 
-Nothing here has been worn since the display changes of 2026-10-05. Every row of the status table is
-headset-unverified.
+The integrated settings preview and cinema correction have not been worn. Unattended device evidence
+does not establish visual or comfort acceptance; the status table distinguishes those levels.
 
 ## 1. Target
 
@@ -21,6 +21,7 @@ docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker   # 
 tools/docker/build-linux.sh on          # make VR=1 into build/us_pc_vr
 tools/docker/build-linux.sh package     # build/package/SM64VR
 tools/docker/build-linux.sh abi
+tools/docker/build-linux.sh verify      # deterministic VR=0 comparison with the pre-preview main
 FRAME_HOST=steamos@<frame> tools/steam_frame/deploy.sh [--config KEY=VALUE ...]
 ```
 
@@ -93,7 +94,8 @@ over from `force_render`'s synthetic ones. A switch between the panel and stereo
 keeps the height. In this third-person view the calibrated head height sits at the game camera, so a
 seated wearer already sees the standing view; `seated` makes every recentre (the 1 s hold and each panel
 switch too) take the height again, so a seated wearer who slumps or shifts is put back at the camera
-by the ordinary recentre. Menu is the game's Start; a short View press is the gamepad Back (the player
+by the ordinary recentre. Switching `seated` on takes the height at once (the height only: the yaw, the
+horizontal origin and a held menu stay), so the settings page shows what it does. Menu is the game's Start; a short View press is the gamepad Back (the player
 list in online play; SM64 itself has no Select).
 
 **Turning (`turn_mode`, `snap_angle`, `smooth_turn_speed`).** Right stick X, through the sfvr turn helper:
@@ -187,12 +189,14 @@ Comfort keys (section 4; all live):
 | `camera_shake` | off | |
 | `level_pitch` | on | |
 | `diag_turn_stick` | 0 (off) | -1 to 1, config and env only |
+| `settings_page_side` | `right` | `right`, `left`, `centre` (section 10) |
+| `diag_settings_preview` | 0 (off) | 0 to 600 s, config and env only (section 10) |
 
 Environment variables `SM64_VR_<KEY>` override a key for one run. Diagnostics: `force_render`
 (draw and run in standby with a synthetic head), `diag_yaw`, `dump_frame`, `dump_worn_frame`,
 `probe_seconds`, `diag_menu_stereo`, `diag_rate_unworn`, `diag_cinema_seconds`,
 `diag_dialog_cutscene_seconds` (section 11),
-`diag_turn_stick` (section 4), and `timing` for the `[vr-perf]` line every 10 s
+`diag_turn_stick` (section 4), `diag_settings_preview` (section 10), and `timing` for the `[vr-perf]` line every 10 s
 (`fps`, `missed`, `cpu`, `tick`, `replay`, `hud`, `eye`, `gpu`). The stages are CPU submission times;
 `gpu` is the GPU time of the eye and HUD passes from timestamp queries read a few frames late. While
 the rate check runs it logs `refresh rate: N fps over 10 s at R Hz (frame period ...)` each window.
@@ -281,13 +285,14 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Live apply of a changed setting to the renderer (`vr_render_apply_settings`) | built, not run |
 | The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | built (arm64 package and ABI check), not rendered, not run |
 | The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | built, not run |
+| Settings page over the gameplay view: pause overview held off while the page is open, overview cut faded both ways, menu turned aside (`settings_page_side`) and eased home, game HUD left out for `hud_visible` off, `seated` on takes the height | pure test (`test_vr_preview.c`, `test_vr_stage.c`) and host render (`test_vr_cinema.c`: fade, menu yaw, `hide_hud` through `vr_render_frame`); the camera.c hook and the DJUI flag built, not run; device recipe `diag_settings_preview` not yet run |
 | Cinema screen corners, positive parallax, display-time latch, stage fades, cinema projection-layer structs and settings | pure test; headset-unverified |
 | Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | verified unattended 2026-10-06 for the eye replay (`diag_cinema_seconds = 10` on the menu background: mode cinema, screen 3.0 m, 3.6 x 2.0 m, both eyes letterboxed with everything behind the screen; 120 fps). Text band and real cutscene classification: device-unverified; not worn |
 | Cinema aspect and interpolated projection load | verified unattended 2026-10-07 (`diag_dialog_cutscene_seconds = 30`: cinema 162 in camera mode 11, `world_proj_loads=2` in both eyes, `picture_aspect=1.777778`; the 16:9 picture shows Mario in normal proportions, positive parallax, and gameplay stereo returns after). Root cause: VR code's `atan2f` linked to the game's own (SM64 convention) on the device only. The real King Whomp scene is not worn |
 | One-shot boss-mode dialog diagnostic | verified unattended 2026-10-07 (recipe in section 11) |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
 | Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | aspect fix built and packaged 2026-10-07: ELF AArch64, maximum glibc 2.34 below the 2.35 floor; all 416 package hashes verified. This fix is not deployed or worn |
-| VR-disabled flat build and source identity of modified shared translation units | linked AArch64 executable; VR-off tokens identical to lane base; flat game not played |
+| VR-disabled flat build and source identity of modified shared translation units | verified 2026-10-07: independent deterministic pre-preview main and integrated builds have identical executable bytes (section 12); flat game not played |
 
 ## 10. VR settings page
 
@@ -324,6 +329,53 @@ performance, Accessibility & audio (no entries yet, so it is not listed), Room. 
 - **Pad navigation.** The same path as a gamepad in flat coopdx: D-pad or stick moves between entries, A
   changes a toggle or choice or picks up a slider (then stick left and right), B goes back. Buttons are 2
   degrees tall (the standard's 2.5 to 3 degree target is for the laser).
+- **Preview on the gameplay view.** SM64's course pause zooms Lakitu out: two frames after Start, in
+  the outdoor areas of `sZoomOutAreaMasks`, `zoom_out_if_paused_and_outside` puts the camera node 6000
+  units out over the area's centre. The page used to be seen over that overview, so a change of scale,
+  height, closer or lower showed on a toybox of the whole map, not on the view it changes. Now:
+  - While the page is open (any of its panels: `gVrSettingsPage.open`, set and cleared by
+    `djui_panel_vr.c`'s first panel) `camera.c` holds the overview off, as flat coopdx does for its
+    player menu. The camera node then takes Lakitu's pose, and a paused game does not update Lakitu, so
+    that pose is the one from the last tick before the pause, with Mario in view. Nothing is captured or
+    restored: Lakitu's state is never touched by the overview. The vanilla overview stays on the plain
+    pause screen and comes back when the page closes. In online play the game is not paused and there
+    is no overview, so the page is over live gameplay.
+  - Every key that changes the view reads live (section 4): `world_scale`, `height_offset`,
+    `camera_closer`, `camera_lower`, `head_translation`, `level_pitch` (no page entry), `hud_distance`
+    and `hud_scale` (the held menu is placed again from the head it opened at, each frame, with the
+    current distance), `seated` (switching it on takes the height now). `hud_visible` off leaves the
+    game's HUD out behind the open page (`gVrSettingsPage.hide_hud`, area.c). `star_select_scale` only
+    shows on the act select, where there is no pause. The comfort gate (`vrr.play`) is open on the
+    paused gameplay view, so closer and lower apply; it is closed on the overview, which is a map, not
+    the play camera. The pause shade (`shade_screen`) is left out while the page is open.
+  - **The menu turns aside.** While the page is open the held menu (the HUD quad) turns about the head
+    it was placed from, to `settings_page_side` (`right` by default, `left`, or `centre` for where it
+    opened), far enough that the page's inner edge is 10 degrees from the forward: 20 degrees at
+    `hud_scale` 100, 30 at 200. It eases there at 160 degrees per second (it is a panel, not the
+    world) and back when the page closes; with the menu gone the gameplay HUD is unturned at once. The
+    page is read with a head turn and the scene ahead stays clear. The gameplay HUD is on the same quad,
+    so it turns with it. Right is the default so the dominant hand's laser (follow-up) points to it
+    without crossing the body; it is a setting (lesson 13).
+  - **No snap.** The overview's cut, both ways (Start, the page opening and closing, resume), starts the
+    stage's black fade (0.25 s hold, 0.35 s out) in stereo, from `gVrTick.pause_overview` published with
+    the tick that draws it, so the frame that jumps is already black. The page opening and closing
+    alone is not a camera jump and does not fade. Before this the plain pause cut to the overview with
+    no fade.
+  - **Device recipe (unattended).** `diag_settings_preview = N`: after N seconds of gameplay it
+    presses Start (the overview), opens the pause menu at 1.5 s, dumps at 3 s (`paused-`), opens the page's
+    Room tab at 4 s, dumps at 6 s (`page-`: the gameplay view behind the turned page), steps
+    `world_scale` to Mario 0.80 m and `camera_closer` to 0.4 through the tab's rows at 7 s, dumps at
+    8 s (`step-`), puts both back exactly at 9 s, closes the menus at 10 s, presses Start at 10.5 s and
+    dumps at 12 s (`resumed-`). Each dump is `<tag>vr-eye0.png`, `vr-eye1.png`, `vr-hud.png` and
+    `vr-state.txt` (its `preview` line: page, overview, menu yaw, side, `hide_hud`), and each step logs a
+    `settings page: diag:` line with the play mode, the overview and the two values. Run with
+    `run_unattended.sh --seconds 45 --env SM64_VR_FORCE_RENDER=1 --env SM64_VR_DIAG_SETTINGS_PREVIEW=15
+    -- --server 7777 --skip-intro` (Castle Grounds is an overview area). Expect `paused-vr-eye0.png` to
+    be the overview, `page-` and `step-` the view Mario was in before the pause with the page turned
+    right, `step-` visibly closer and larger, `resumed-` the gameplay view, `preview: ... faded` log
+    lines at each overview cut, and `world_scale` / `camera_closer` back at their values at the end.
+    The page writes `vr.toml` 0.5 s after a change, so the stepped values are in it from 7.5 s to 9.5 s:
+    let the run last past N + 10 s (the 45 s above with N = 15 does), and remove the key afterwards.
 - **Paused.** The pause menu does not stop the game loop in SM64: each XR frame still replays the newest
   tick, and the scheduler keeps ticking, so the page redraws and reads input while the game is paused.
   Nothing branches on pause in the VR loop (the DK64 lesson 99 case does not apply).
@@ -339,6 +391,12 @@ performance, Accessibility & audio (no entries yet, so it is not listed), Room. 
   HUD off from the page: the page stays; close the menu and the HUD is gone; turn it back on. (7) "Recentre
   now" puts the menu and the view in front of the head. (8) Defaults on a tab restores that tab only.
   (9) Quit and relaunch: the changed values are in `vr.toml` and in effect.
+  (10) The preview, in Bob-omb Battlefield: Start (the view fades to the overview), R, VR settings: a
+  fade back to the view you paused in, Mario in front, the page turned to the right. Room tab: move
+  World scale, Height offset, Camera closer and lower, switch Seated on while sitting; each shows on
+  Mario at once. Is the page's place comfortable to read with a head turn, and does it ever hide what
+  you were changing? Try `left` and `centre` under HUD & menus. Back: a fade to the overview; resume:
+  a fade to play. Any fade that felt like a turn or a snap?
 
 
 ## 11. Scripted cameras and the stereo cinema
@@ -519,7 +577,7 @@ with a synthetic retained-list producer, then reads its GL eye/HUD targets outsi
 It checks rendered-square proportions across 252 stereo frames (7 cutscene/mode pairs × 4 source
 aspects × 3 interpolated FOVs × 3 viewports), the retained matrix address, nonzero projection
 replacement counts and exact screen corners in the presence of the game's colliding `atan2f`.
-The full host cinema executable has 8 cases and 8,255 checks. The old `vr_cinema.c` linked into
+The integrated host cinema executable has 8 cases and 8,304 checks. The old `vr_cinema.c` linked into
 this same executable fails 1,112 checks. Further checks cover distinct stereo eye images, opaque black text-band margins,
 matching interpolated sky/world FOV, cinema holds/gaps, black mono/warp eye pixels, act-select routing
 (including a conflicting gameplay flag and stale cutscene id),
@@ -527,8 +585,27 @@ the immersive setting, diagnostic activation/expiry and acquisition failure. It 
 check, not a real SM64 scene, device run or worn acceptance**. Strict host compilation exposed a
 pre-existing dump-path truncation warning; the dump slot now has room for the directory and filename.
 `tools/docker/build-linux.sh tests` runs all host suites, including this bounded renderer check.
-The checkout lacks `tools/verify_flat_build_unchanged.sh` referred to by the wrapper's `verify` step;
-use the recorded direct flat build check below. The 2026-10-07 aspect lane also compared the changed
+`tools/docker/build-linux.sh verify` now runs `tools/verify_flat_build_unchanged.sh` on the host,
+so managed worktrees whose Git directory is outside the Docker mount work too. It builds isolated
+snapshots of pre-preview main (`fcb49579d`) and the current tree, including staged/unstaged source,
+with `VR=0 DEVELOPMENT=0 DEBUG=0 DEBUG_INFO_LEVEL=0`, and requires identical executable SHA256
+values. `DEBUG=0` alone retains debug line tables, which change when VR-only source lines are added;
+`DEBUG_INFO_LEVEL=0` explicitly disables that metadata without changing assertions or optimization. The Linux ARM
+flat target is `sm64coopdx.arm`; desktop Linux uses `sm64coopdx`. Scratch trees are removed on exit.
+`tools/test_verify_flat_build_unchanged.sh` checks snapshot handling, both executable names and the
+mismatch gate with a mock container command.
+
+The 2026-10-07 integrated comparison passed against `fcb49579d`: both full AArch64 flat executables
+have SHA256 `f139a1287a55561ac2bd153ebf5e37e55b0516018ccb5ccc63bff5267be8f04d`.
+This is deterministic binary parity, not a flat gameplay test. The earlier comparison with debug
+line tables retained failed as expected because the source line numbers changed.
+
+Package provenance is resolved on the host before entering Docker, with a validated source SHA and
+`clean`/`dirty` state including ordinary untracked files, then passed to the package script. Direct
+package-script invocations still resolve local Git. Missing or partial provenance fails packaging
+instead of emitting `unknown` or claiming a clean tree when Git is inaccessible.
+
+The 2026-10-07 aspect lane also compared the changed
 camera, graph-renderer and Fast3D translation units' VR-off preprocessor output against the branch
 base; only assertion source-line metadata needed normalization. This is source parity evidence,
 not a new flat runtime check.

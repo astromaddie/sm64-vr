@@ -16,6 +16,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include "vr_game.h"
+#include "vr_preview.h"
 #include "vr_render.h"
 #include "pc/gfx/gfx_vr.h"
 #include "vr.h"
@@ -726,6 +727,50 @@ static void test_renderer_routing_and_images(void) {
     layers = render_at(14 * SEC);
     CHECK_INT(vr_render_info()->mode, VR_MODE_MONO);
     CHECK(layers.projection && layers.panel);
+    vr_render_shutdown();
+
+    // The VR settings page over the gameplay view (section 10): SM64's pause overview
+    // cut fades both ways, the page's menu turns aside (right by default) under that
+    // fade and eases home, and hud_visible off leaves the game's HUD out behind it.
+    gVrTick.in_main_menu = false;
+    gVrTick.cutscene = 0;
+    render.diag_cinema_seconds = 0;
+    render_init(&render);
+    render_at(20 * SEC);
+    layers = render_at(21 * SEC);
+    CHECK_INT(vr_render_info()->mode, VR_MODE_STEREO);
+    CHECK_NEAR(layers.fade_alpha, 0, 0);
+    float head_yaw = vr_yaw_of(head.orientation);
+    gDjuiPanelPauseCreated = true;
+    gVrTick.pause_overview = true;
+    layers = render_at(22 * SEC);
+    CHECK_NEAR(layers.fade_alpha, 1, 0); // into the overview
+    CHECK(layers.hud);
+    CHECK_NEAR(vr_yaw_of(layers.hud_pose.orientation), head_yaw, 1e-4);
+    CHECK(!gVrSettingsPage.hide_hud);
+    layers = render_at(23 * SEC);
+    CHECK_NEAR(layers.fade_alpha, 0, 0);
+    gVrSettingsPage.open = true;
+    layers = render_at(24 * SEC); // the page is up; the camera comes back on the next tick
+    CHECK_NEAR(layers.fade_alpha, 0, 0);
+    gVrTick.pause_overview = false;
+    layers = render_at(24 * SEC + SEC / 30);
+    CHECK_NEAR(layers.fade_alpha, 1, 0); // back to the play camera, faded
+    float target = vr_preview_menu_target(VR_PREVIEW_SIDE_RIGHT, vr_preview_page_half(layers.hud_width, render.hud_distance));
+    CHECK(target < -15.0f * (float)M_PI / 180.0f);
+    CHECK_NEAR(vr_yaw_of(layers.hud_pose.orientation), head_yaw + target, 1e-3);
+    CHECK(gVrSettingsPage.hide_hud); // hud_visible is off in these settings
+    CHECK(layers.hud); // the page itself stays
+    gVrSettingsPage.open = false; // Back to the pause menu: home again at a panel's pace
+    layers = render_at(25 * SEC);
+    float yaw = vr_yaw_of(layers.hud_pose.orientation);
+    CHECK(yaw > head_yaw + target + 1e-3f && yaw < head_yaw - 1e-3f);
+    for (int i = 1; i <= 4; i++) {
+        layers = render_at(25 * SEC + i * SEC / 10);
+    }
+    CHECK_NEAR(vr_yaw_of(layers.hud_pose.orientation), head_yaw, 1e-4);
+    CHECK(!gVrSettingsPage.hide_hud);
+    gDjuiPanelPauseCreated = false;
     vr_render_shutdown();
     CHECK_INT(glGetError(), GL_NO_ERROR);
     glDeleteTextures(VR_SURFACE_COUNT, render_images);

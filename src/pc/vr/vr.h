@@ -46,6 +46,8 @@ bool vr_setting_reset(const char *key); // back to the default
 void vr_settings_flush(void); // save now if anything changed
 unsigned vr_settings_revision(void); // counts changes, for code that caches a setting
 void vr_recentre_now(void); // as holding L View: the next stereo frame recentres on the head
+// Diagnostics: the next rendered frame is dumped like dump_frame, its files named `tag`vr-eye0.png ...
+void vr_request_dump(const char *tag);
 
 // The size the game's 2D layout uses (the window size it sees in VR).
 void vr_ui_size(int *width, int *height);

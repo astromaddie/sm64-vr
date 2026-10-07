@@ -25,6 +25,7 @@ struct VrTickInfo {
     float transition_alpha;
     unsigned char transition_rgb[3];
     bool transition_hold;
+    bool pause_overview; // camera.c drew SM64's pause overview instead of Lakitu's view
 };
 
 // Written by render_game() for the display list of the newest tick
@@ -72,6 +73,16 @@ struct VrCamTurn {
     bool no_shake;
 };
 extern struct VrCamTurn gVrCamTurn;
+
+// The VR settings page (djui_panel_vr.c; docs/VR_ARCHITECTURE.md section 10). While it
+// is open camera.c holds the pause overview off, so the page is seen over the gameplay
+// view it changes, and the pause shade is left out. hide_hud (the renderer, each frame):
+// the page is open with hud_visible off, so the game's own HUD is left out behind it.
+struct VrSettingsPage {
+    bool open;
+    bool hide_hud;
+};
+extern struct VrSettingsPage gVrSettingsPage;
 
 #endif
 

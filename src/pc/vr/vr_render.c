@@ -20,6 +20,7 @@
 #include "vr_input.h"
 #include "vr_log.h"
 #include "vr_math.h"
+#include "vr_preview.h"
 #include "vr_turn.h"
 #include "pc/gfx/gfx_vr.h"
 
@@ -41,7 +42,7 @@ typedef struct {
     GLuint pbo;
     GLsync fence;
     bool pending;
-    char path[640]; // dump directory plus the image filename
+    char path[680]; // dump directory plus the tag and the image filename
     uint32_t width, height;
     int comp;
 } vr_dump_slot_t;
@@ -94,7 +95,12 @@ static struct {
     float hud_width, hud_height;
     bool hud_menu_placed; // the HUD quad is held where the pause menu opened
     uint32_t hud_menu_recentres;
+    vr_pose_t hud_menu_head; // ... from this head
+    vr_preview_t preview; // the VR settings page over the gameplay view (section 10)
+    bool seated_seen, seated_prev, seated_take; // `seated` switched on: take the height
     bool dump_this_frame;
+    bool dump_requested; // vr_render_request_dump
+    char dump_tag[32], dump_tag_requested[32]; // the dump's file prefix
     bool holding; // held behind a closed warp transition (full fade, no eyes)
     uint32_t frames;
     uint32_t worn_stereo_frames; // stereo frames from tracked views
@@ -187,6 +193,11 @@ void vr_render_request_recentre(void) {
 
 void vr_render_request_height(void) {
     vr_stage_request_height(&vrr.stage);
+}
+
+void vr_render_request_dump(const char *tag) {
+    snprintf(vrr.dump_tag_requested, sizeof(vrr.dump_tag_requested), "%s", tag ? tag : "");
+    vrr.dump_requested = true;
 }
 
 
@@ -438,7 +449,7 @@ static void dump_queue(int slot, const char *name, GLuint image, uint32_t w, uin
     if (!s->pbo) {
         glGenBuffers(1, &s->pbo);
     }
-    snprintf(s->path, sizeof(s->path), "%s/%s", vrr.dump_dir, name);
+    snprintf(s->path, sizeof(s->path), "%s/%s%s", vrr.dump_dir, vrr.dump_tag, name);
     s->width = w;
     s->height = h;
     s->comp = comp;
@@ -456,8 +467,8 @@ static void dump_queue(int slot, const char *name, GLuint image, uint32_t w, uin
 }
 
 static void dump_state_log(const vr_layers_t *layers) {
-    char path[640];
-    snprintf(path, sizeof(path), "%s/vr-state.txt", vrr.dump_dir);
+    char path[680];
+    snprintf(path, sizeof(path), "%s/%svr-state.txt", vrr.dump_dir, vrr.dump_tag);
     FILE *f = fopen(path, "w");
     if (!f) {
         vr_logf("dump: could not write %s", path);
@@ -489,6 +500,9 @@ static void dump_state_log(const vr_layers_t *layers) {
         gVrCamTurn.queued * 180.0 / M_PI, vrr.shown_heading.unwrapped * 180.0 / M_PI, vrr.game_heading.unwrapped * 180.0 / M_PI,
         vrr.play, vrr.comfort.camera_closer, vrr.comfort.camera_lower, vrr.comfort.height_offset, vrr.comfort.seated,
         vrr.vignette, vrr.comfort.camera_shake, vrr.comfort.move_relative, gVrCamTurn.move_yaw * 180.0 / M_PI);
+    fprintf(f, "preview page_open=%d overview=%d menu_up=%d menu_yaw_deg=%.2f side=%d hide_hud=%d\n",
+        gVrSettingsPage.open, gVrTick.pause_overview, gDjuiPanelPauseCreated, vrr.preview.menu_yaw * 180.0 / M_PI,
+        (int)vr_settings_get(vr_settings(), "settings_page_side"), gVrSettingsPage.hide_hud);
     fprintf(f, "tick rendered_area=%d gameplay_camera=%d in_main_menu=%d transition=%d interp_cam=%d\n",
         gVrTick.rendered_area, gVrTick.gameplay_camera, gVrTick.in_main_menu, gVrTick.transition, gVrInterpCamValid);
     fprintf(f, "recentre yaw=%.5f origin=%.4f,%.4f,%.4f applied=%u switches=%u\n",
@@ -794,6 +808,12 @@ static void comfort_refresh(void) {
     vrr.st.rig.level_pitch = vrr.comfort.level_pitch;
     vrr.st.rig.height_offset = vrr.comfort.height_offset;
     vrr.stage.seated = vrr.comfort.seated;
+    // Switching `seated` on takes the height at once, so the page shows what it does
+    if (vrr.seated_seen && vrr.comfort.seated && !vrr.seated_prev) {
+        vrr.seated_take = true;
+    }
+    vrr.seated_seen = true;
+    vrr.seated_prev = vrr.comfort.seated;
     gVrCamTurn.no_shake = !vrr.comfort.camera_shake;
 }
 
@@ -802,7 +822,9 @@ static void comfort_refresh(void) {
 // lower), the headings for the log and the vignette, and the stick's frame
 static void comfort_frame(bool stereo, bool hold, float dt) {
     double now_s = (double)vrr.now_ns * 1e-9;
-    vrr.play = stereo && !hold && gVrTick.gameplay_camera && !gVrTick.star_select && !gVrTick.in_main_menu;
+    // Not on SM64's pause overview: closer, lower and the rest are for the play camera
+    vrr.play = stereo && !hold && gVrTick.gameplay_camera && !gVrTick.star_select && !gVrTick.in_main_menu
+        && !gVrTick.pause_overview;
 
     // The gate: the game camera can take a turn, and still updates (a pause
     // or a cutscene that stops camera updates closes it)
@@ -915,6 +937,36 @@ static void comfort_frame(bool stereo, bool hold, float dt) {
     }
 }
 
+// The VR settings page over the gameplay view (docs/VR_ARCHITECTURE.md section 10):
+// a fade when the shown camera cuts to or from SM64's pause overview, the menu's turn
+// aside while the page is open, and the game's HUD left out for hud_visible off
+static void preview_frame(bool stereo, float dt) {
+    float hud_width, hud_height;
+    vr_hud_size(vrr.st.hud_distance, vrr.st.hud_scale, (float)vrr.st.ui_width / (float)vrr.st.ui_height,
+        &hud_width, &hud_height);
+    const vr_settings_t *settings = vr_settings();
+    vr_preview_in_t in = {
+        .stereo = stereo,
+        .menu_up = gDjuiPanelPauseCreated,
+        .page_open = gVrSettingsPage.open,
+        .overview = gVrTick.pause_overview && gVrTick.gameplay_camera,
+        .side = settings ? (vr_preview_side_t)(int)vr_settings_get(settings, "settings_page_side") : VR_PREVIEW_SIDE_RIGHT,
+        .page_half = vr_preview_page_half(hud_width, vrr.st.hud_distance),
+        .dt = dt
+    };
+    vr_preview_out_t out = vr_preview_frame(&vrr.preview, &in);
+    if (out.fade) {
+        vr_stage_fade(&vrr.stage, vrr.now_ns);
+    }
+    if (out.page_changed || out.overview_changed) {
+        vr_logf("preview: page %s, pause overview %s%s, menu turned %.1f deg (target %.1f)",
+            in.page_open ? "open" : "closed", in.overview ? "on" : "off", out.fade ? ", faded" : "",
+            out.menu_yaw * 180.0f / (float)M_PI,
+            (in.page_open && in.menu_up && stereo ? vr_preview_menu_target(in.side, in.page_half) : 0.0f) * 180.0f / (float)M_PI);
+    }
+    gVrSettingsPage.hide_hud = gVrSettingsPage.open && !vrr.st.hud_visible;
+}
+
 // Why a frame cannot be stereo; NULL when it can
 static const char *mono_reason(void) {
     if (!vrr.views_ok) {
@@ -1017,6 +1069,12 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
     }
     vrr.frames++;
     vrr.dump_this_frame = vrr.st.dump_frame > 0 && vrr.frames == (uint32_t)vrr.st.dump_frame && vrr.dump_dir[0];
+    vrr.dump_tag[0] = '\0';
+    if (vrr.dump_requested && vrr.dump_dir[0]) {
+        vrr.dump_requested = false;
+        vrr.dump_this_frame = true;
+        memcpy(vrr.dump_tag, vrr.dump_tag_requested, sizeof(vrr.dump_tag));
+    }
 
     // force_render's synthetic head and the tracked head are different heads:
     // recentre when one takes over from the other (putting the headset on
@@ -1092,9 +1150,14 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         if (vr_stage_apply_recentre(&vrr.stage, raw_views)) {
             vr_logf("render: recentred (yaw %.1f deg, standing height %s %.2f m)", vrr.stage.recentre.yaw * 180.0 / M_PI,
                 height ? "taken:" : "kept:", vrr.stage.recentre.origin[1]);
+            vrr.seated_take = false;
+        } else if (vrr.seated_take && vr_stage_take_height(&vrr.stage, raw_views)) {
+            vr_logf("render: seated: standing height taken: %.2f m", vrr.stage.recentre.origin[1]);
+            vrr.seated_take = false;
         }
     }
     comfort_frame(stereo, hold, dt);
+    preview_frame(stereo && !hold, dt);
 
     if (hold) {
         gVrBillboardHead = false;
@@ -1158,12 +1221,14 @@ void vr_render_frame(Gfx *dl, const vr_frame_t *frame, bool renders, vr_layers_t
         gVrBillboardHead = true;
 
         // The pause menu (and the VR settings page) is placed where the head looked when it opened and
-        // stays there until a recentre (standard.md section 3); the gameplay HUD follows the head
+        // stays there until a recentre (standard.md section 3); the gameplay HUD follows the head.
+        // While the VR settings page is open the menu turns aside (settings_page_side).
         if (!gDjuiPanelPauseCreated || !vrr.hud_menu_placed || vrr.hud_menu_recentres != vrr.stage.recentres_applied) {
-            vr_hud_pose(&vrr.head, vrr.st.hud_distance, &vrr.hud_pose);
+            vrr.hud_menu_head = vrr.head;
             vrr.hud_menu_placed = gDjuiPanelPauseCreated;
             vrr.hud_menu_recentres = vrr.stage.recentres_applied;
         }
+        vr_preview_menu_pose(&vrr.hud_menu_head, vrr.preview.menu_yaw, vrr.st.hud_distance, &vrr.hud_pose);
         vr_hud_size(vrr.st.hud_distance, vrr.st.hud_scale, (float)vrr.st.ui_width / (float)vrr.st.ui_height,
             &vrr.hud_width, &vrr.hud_height);
 

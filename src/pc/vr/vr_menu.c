@@ -11,6 +11,7 @@ static const char *const cutscene_choices[] = { "3D cinema", "Immersive" };
 static const char *const hand_choices[] = { "Right", "Left" };
 static const char *const snap_angle_choices[] = { "15 deg", "30 deg", "45 deg", "60 deg", "90 deg" };
 static const double snap_angle_values[] = { 15, 30, 45, 60, 90 };
+static const char *const page_side_choices[] = { "Right", "Left", "Centre" };
 static const char *const refresh_choices[] = { "72 Hz", "90 Hz", "120 Hz", "144 Hz" };
 static const double refresh_values[] = { 72, 90, 120, 144 };
 
@@ -45,6 +46,7 @@ static const vr_menu_entry_t entries[] = {
 	SLIDER("hud_distance", "HUD distance", VR_TAB_HUD, 1, 6, 0.25, 1, "%.2f m"),
 	SLIDER("hud_scale", "HUD size", VR_TAB_HUD, 50, 200, 5, 1, "%.0f%%"),
 	SLIDER("panel_distance", "Menu distance", VR_TAB_HUD, 1, 6, 0.25, 1, "%.2f m"),
+	CHOICE_ENUM("settings_page_side", "Settings page side", VR_TAB_HUD, page_side_choices),
 	SLIDER_RANGE("cinema_distance", "Cinema distance", VR_TAB_HUD, "%.1f m"),
 	SLIDER_RANGE("cinema_width", "Cinema width", VR_TAB_HUD, "%.1f m"),
 
