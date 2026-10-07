@@ -295,7 +295,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Star select in stereo, warp transitions with a fade quad | headset-unverified |
 | fov_mode 3 (the Frame's measured full fov) | headset-unverified |
 | Frame controller input, haptics | headset-unverified |
-| Left grip + right stick live scale/camera shortcut and open settings-row sync | host input and renderer tests pass (126 input checks, 72/90/120 Hz parity); physical input and comfort remain headset-unverified |
+| Left grip + right stick live scale/camera shortcut and open settings-row sync | host input and renderer tests pass (126 input checks, 72/90/120 Hz parity); clean `4eefd2271` installed and Frame binding accepted, preview captured unattended 2026-10-07 (section 13); physical input and comfort remain headset-unverified |
 | Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | verified unattended 2026-10-06 (Castle Grounds, `diag_turn_stick = 1`: a 30 degree snap stepped the shown heading 90 to 120 in one frame and the game camera arrived the next tick, no swing; at 120 Hz, 0 missed). Afterwards Lakitu drifted back about 8 degrees over a few seconds with Mario idle, and the view followed (vanilla). Not worn |
 | Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
 | `world_scale` 20 to 400, `camera_closer`, `camera_lower`, `height_offset` (rig maths, contract, IPD, default bit parity) | pure test |
@@ -707,3 +707,40 @@ normalised. These checks establish flag-off source identity; no flat game was pl
 The full `make VR=0 -j4` link also completed successfully: `build/us_pc/sm64coopdx.arm` is ELF
 AArch64, contains no `vr_` or `sfvr_` function symbols, and has SHA256
 `10a0447ddc8f533a7d4ef49f32fe13cffb154741d3159771376fa01bd1f21828`.
+
+## 13. Live adjustment shortcut delivery (2026-10-07)
+
+The left-grip/right-stick shortcut is built and installed from clean source
+`4eefd2271958510f075c514e1222a8c85c9f3bbe`. All host suites pass, including 126 input, 738 preview
+and 8,309 cinema-renderer checks. The input harness exercises production action creation, binding,
+sampling and routing, left-stick forwarding, right-stick suppression, neutral rearming, focus loss
+and 72/90/120 Hz parity. The final DJUI revision-refresh hook compiled in the full ARM64 build;
+the pure host harness does not compile DJUI.
+
+`tools/docker/build-linux.sh on`, `package` and `abi` passed: AArch64, glibc 2.34 below the 2.35 floor,
+GLIBCXX 3.4.29, valid dependency closure and 416 matching payload hashes. Package metadata records
+that clean source revision, GCC 12.3.0 and pinned OpenXR-SDK 1.1.63. The installed executable matches
+SHA256 `a0493c98a21e1dbbdc816d85e5fd93d27f5fe03486bf3fc9d76b843cdf2721ae`.
+`SM64_VR_FLAT_BASELINE=fd125285f tools/docker/build-linux.sh verify` also passed: before/after
+VR-disabled executables both have SHA256
+`f139a1287a55561ac2bd153ebf5e37e55b0516018ccb5ccc63bff5267be8f04d`.
+
+After booking the Frame as `sm64vr-shortcut`, a Steam launch accepted all three profiles and attached
+23 actions. Both-eye/HUD/state captures cover ordinary pause overview, settings gameplay preview,
+changed scale/camera, restored values and resumed gameplay. The existing row diagnostic changed
+world scale 104 → 201.25 → 104 and camera closer 0 → 0.40 → 0; it did not emulate physical grip
+presses. Open Room labels match the stepped values. Capture overhead dropped one window to 78.2 fps
+with seven misses; subsequent windows recovered to 120.0 fps with zero misses and GPU 3.35–3.36 ms.
+
+This was a synthetic-head unattended run with zero tracked stereo frames. Actual grip operation,
+tracked recentring, worn panel readability, comfort and the real King Whomp introduction remain
+headset-unverified. The prior milestone's boss-dialog device evidence remains valid; this increment
+reran its renderer regressions.
+
+The task process stopped, device diagnostics were removed, normal Steam launch settings restored
+and the booking released. Active settings, save and ROM hashes match the pre-run values; original
+title logs were restored. The game's `sm64config-backup.txt` sidecar was not independently backed up
+and now matches the preserved active configuration; its original identity cannot be verified.
+Future runs must include every config sidecar in the pre-run snapshot. Raw current-run evidence is
+archived in the task output `sm64-live-shortcut-evidence.zip` with a SHA256 ledger. The evidence-only
+follow-up commit does not change the installed package's source identity.
