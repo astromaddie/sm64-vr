@@ -55,8 +55,10 @@ typedef struct {
 	vr_menu_action_t action; // BUTTON
 } vr_menu_entry_t;
 
-// Mario is 161 game units tall: world_scale is units per metre
+// Mario is 161 game units tall: world_scale is units per metre. The baseline
+// apparent-size display is 100% at the life-size 104 units/metre setting.
 #define VR_MENU_MARIO_UNITS 161.0
+#define VR_MENU_MARIO_SIZE_PERCENT 10400.0
 
 size_t vr_menu_entry_count(void);
 const vr_menu_entry_t *vr_menu_entry(size_t index);

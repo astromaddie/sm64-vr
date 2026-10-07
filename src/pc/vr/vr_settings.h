@@ -66,6 +66,7 @@ double vr_settings_get(const vr_settings_t *s, const char *name); // effective v
 double vr_settings_clamp(const char *name, double value); // what set() would store; `value` for an unknown name
 bool vr_settings_set(vr_settings_t *s, const char *name, double value);
 double vr_settings_default(const char *name); // 0 for an unknown name
+double vr_settings_default_for(const vr_settings_t *s, const char *name); // current defaults_profile
 bool vr_settings_reset(vr_settings_t *s, const char *name); // set() to the default
 
 void vr_settings_free(vr_settings_t *s);

@@ -389,6 +389,14 @@ static void test_third_person(void) {
     CHECK_NEAR(p[2], 200.0, 1e-3);
     CHECK_NEAR(p[1], 200.0, 1e-3);
 
+    // Negative values extend away from the native origin, including up.
+    vr_third_person_origin(e, a, 0.0f, -1.0f, p);
+    CHECK_NEAR(p[2], 2000.0, 1e-3);
+    CHECK_NEAR(p[1], 1000.0, 1e-3);
+    vr_third_person_origin(e, a, -1.0f, 0.0f, p);
+    CHECK_NEAR(p[2], 1000.0, 1e-3);
+    CHECK_NEAR(p[1], 1000.0, 1e-3);
+
     // The camera moved there keeps its heading; lowered, it looks up toward A
     float view[16];
     game_lookat(e, a, view);
@@ -415,6 +423,39 @@ static void test_third_person(void) {
     // Both 0: unchanged, bit for bit
     vr_game_cam_third_person(&c, a, 0.0f, 0.0f, &t);
     CHECK(memcmp(&t, &c, sizeof(t)) == 0);
+}
+
+static bool trace_halfway(const float source[3], const float proposed[3], float hit[3], void *context) {
+    (void)context;
+    for (int i = 0; i < 3; i++) hit[i] = source[i] + 0.5f * (proposed[i] - source[i]);
+    return true;
+}
+
+static void test_third_person_los_clamps_only_shown_camera(void) {
+    const float e[3] = { 0.0f, 600.0f, 1000.0f }, a[3] = { 0.0f, 200.0f, 0.0f };
+    float requested_closer = -1.0f, requested_lower = -1.0f;
+    float proposed[3], delta[3];
+    vr_game_cam_t source, shown;
+    float view[16];
+    game_lookat(e, a, view);
+    CHECK(vr_game_cam_from_view(view, &source));
+    vr_game_cam_third_person(&source, a, requested_lower, requested_closer, &shown);
+    memcpy(proposed, shown.position, sizeof(proposed));
+
+    vr_game_cam_third_person_constrained(&source, a, requested_lower, requested_closer,
+        trace_halfway, NULL, 5.0f, &shown);
+    float length2 = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        delta[i] = proposed[i] - source.position[i];
+        length2 += delta[i] * delta[i];
+    }
+    float safe_t = 0.5f - 5.0f / sqrtf(length2);
+    for (int i = 0; i < 3; i++) {
+        CHECK_NEAR(shown.position[i], source.position[i] + safe_t * delta[i], 1e-3);
+    }
+    CHECK_NEAR(requested_closer, -1.0, 0.0); // LOS limits the shown camera, not settings
+    CHECK_NEAR(requested_lower, -1.0, 0.0);
+    CHECK_NEAR(vr_game_cam_heading(&shown), vr_game_cam_heading(&source), 1e-5);
 }
 
 // The rendering contract holds for an anchor turned, nearer and lower: the
@@ -490,6 +531,7 @@ int main(void) {
     RUN(test_projection_kinds);
     RUN(test_orbit);
     RUN(test_third_person);
+    RUN(test_third_person_los_clamps_only_shown_camera);
     RUN(test_contract_with_comfort);
     RUN(test_height_and_ipd);
     RUN(test_default_parity);

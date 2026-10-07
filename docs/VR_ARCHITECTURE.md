@@ -73,13 +73,16 @@ vignette ramp; both pure and host-tested), the comfort part of `vr_render.c`, an
 `src/game/camera.c` and `mario.c`.
 
 **Scale and height.** Mario is 161 units tall; `world_scale = 104` units per metre makes him 1.55 m, life
-size. The range is 20 (Mario 8 m) to 400 (Mario 0.4 m, a diorama). The star select screen has its own
-scale (`star_select_scale`, 300). `camera_closer` (0 to 0.8) moves the head origin along the line from the
-game camera to its look-at point and `camera_lower` (0 to 1) then moves the height that is left toward the
-look-at point's (after DK64: for camera E and look-at A, P.xz = E.xz + C (A.xz - E.xz),
-P.y = A.y + (1 - C)(1 - L)(E.y - A.y)); lowering turns the inherited pitch toward A, the heading stays.
-They apply in gameplay only, not on the star select. There is no collision test for the moved origin, so
-large values can put the eye inside walls or Mario. `height_offset` raises the eyes by that many metres
+size. The range is 20 (Mario 8 m) to 416 (Mario 0.39 m, a diorama); the Room row shows apparent size from
+25% to 520% relative to the 104 units/metre baseline (the native range maps to 25% to 520%). The star select screen has its own scale
+(`star_select_scale`, 300). `camera_closer` (-1 to 0.8) moves the head origin along or beyond the line
+between the game camera and its look-at point; `camera_lower` (-1 to 1) then changes the remaining height
+toward or away from the look-at point (for camera E and look-at A, P.xz = E.xz + C (A.xz - E.xz),
+P.y = A.y + (1 - C)(1 - L)(E.y - A.y)). Negative closer extends farther, and negative lower extends higher.
+Lowering turns the inherited pitch toward A; heading stays. They apply in gameplay only, not on star select.
+The renderer uses the engine's ray collision test to stop the shown origin five game units before an
+obstruction; settings remain at the requested values, so they take effect again when the path clears.
+`height_offset` raises the eyes by that many metres
 (times `world_scale`). Eye offsets (the IPD) come only from the runtime's eye poses and are scaled by
 `world_scale` alone; `head_translation` scales only the head's displacement from the recentre point;
 orbit distances and pivots stay in game units. Every key here is read every frame, so a change applies
@@ -189,7 +192,7 @@ and keeps polling.
 
 `vr.toml` in `~/.local/share/SM64VR/` (keys from the sfvr registry plus `world_scale`, `level_pitch`,
 `star_select_scale`, `camera_closer`, `camera_lower`, `third_person_move`, `force_mono`, `fov_mode`,
-`panel_distance`, `panel_width`, `cutscenes`, `cinema_distance`, `cinema_width` and the diagnostics).
+`defaults_profile`, `panel_distance`, `panel_width`, `cutscenes`, `cinema_distance`, `cinema_width` and the diagnostics).
 
 Comfort keys (section 4; all live):
 
@@ -201,9 +204,10 @@ Comfort keys (section 4; all live):
 | `vignette` / `vignette_strength` | off / 0.6 | 0 to 1 |
 | `move_relative` | `head` | `head`, `left`, `right` |
 | `third_person_move` | `face_move` | `face_move` only |
-| `world_scale` | 104 units/m | 20 to 400 |
-| `camera_closer` | 0 | 0 to 0.8 |
-| `camera_lower` | 0 | 0 to 1 |
+| `world_scale` | 104 units/m | 20 to 416 |
+| `camera_closer` | 0 | -1 to 0.8 |
+| `camera_lower` | 0 | -1 to 1 |
+| `defaults_profile` | `standard` | `standard`, `frame_personal` |
 | `height_offset` | 0 m | -1 to 1 (the sfvr registry's range) |
 | `seated` | off | |
 | `head_translation` | 1.0 | 0 to 2 |
@@ -298,13 +302,13 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Left grip + right stick live scale/camera shortcut and open settings-row sync | host input and renderer tests pass (126 input checks, 72/90/120 Hz parity); clean `4eefd2271` installed and Frame binding accepted, preview captured unattended 2026-10-07 (section 13); physical input and comfort remain headset-unverified |
 | Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | verified unattended 2026-10-06 (Castle Grounds, `diag_turn_stick = 1`: a 30 degree snap stepped the shown heading 90 to 120 in one frame and the game camera arrived the next tick, no swing; at 120 Hz, 0 missed). Afterwards Lakitu drifted back about 8 degrees over a few seconds with Mario idle, and the view followed (vanilla). Not worn |
 | Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
-| `world_scale` 20 to 400, `camera_closer`, `camera_lower`, `height_offset` (rig maths, contract, IPD, default bit parity) | pure test |
+| `world_scale` 20 to 416, signed `camera_closer` / `camera_lower`, height and IPD | pure tests; LOS constraint exercised through the production camera function |
 | Recentre keeps the standing height; View held 3 s, focus and `seated` take it | pure test |
 | Vignette on artificial rotation (ramp), `camera_shake` off | pure test (ramp); drawing and the shake hook unrun |
 | `[vr-cam]` logs and `diag_turn_stick` | verified unattended 2026-10-06 |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |
-| In-headset VR settings page: tab table, value mapping (world scale as Mario's height), registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
-| Runtime settings API: set with clamping, reset, save, reload, environment overrides never written back | pure test (`tests/vr/test_vr_settings.c`) |
+| In-headset VR settings page: tab table, apparent-size percentage mapping, registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
+| Runtime settings API: signed camera clamping, persistent defaults profile, profile-aware reset, save/reload, env overrides | pure test (`tests/vr/test_vr_settings.c`) |
 | Live apply of a changed setting to the renderer (`vr_render_apply_settings`) | verified unattended 2026-10-07 for world scale and camera closer through the actual Room rows; height/lower/seated/head movement have host coverage and need a wear check |
 | The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | actual pause/Room panels rendered unattended 2026-10-07; manual pad navigation, other tabs and Defaults remain wearer-unverified |
 | The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | verified unattended 2026-10-07 for HUD-on/off placement and page visibility; tracked head movement and manual recentre remain wearer-unverified |
@@ -331,7 +335,7 @@ performance, Accessibility & audio (no entries yet, so it is not listed), Room. 
   with no change here. The cinema and comfort keys are in the table already (`cutscenes`,
   `cinema_distance`, `cinema_width`, `camera_closer`, `camera_lower`). `src/pc/djui/djui_panel_vr.c`
   builds the panels from it; `djui_slider.c` has a small `SM64_VR` hook to show a unit instead of the
-  step number. World scale is shown as Mario's height in metres (161 / `world_scale`, 0.45 to 3.0 m; `world_scale` 20 to 400 allows 0.40 to 8.05 m).
+  step number. World scale is shown as Mario's height in metres (161 / `world_scale`, 0.45 to 3.0 m; `world_scale` 20 to 416 allows 0.40 to 8.05 m).
   Resolution is read when the swapchains are made, so its label says "(restart)"; the refresh rate
   label says "SteamVR wins" (section 3). Sliders use whole steps (at most about 60 stops), because
   DJUI's pad control moves a slider one step per tick.

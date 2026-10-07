@@ -65,18 +65,23 @@ float vr_game_cam_heading(const vr_game_cam_t *cam);
 // unchanged. Game units throughout: no scale applies.
 void vr_game_cam_orbit(const vr_game_cam_t *cam, const float pivot[3], float heading, vr_game_cam_t *out);
 
-// The third-person head origin (camera_closer, camera_lower, after DK64): for
-// the camera at E looking at A, closer C moves it along E -> A, then lower L
-// moves the height that is left toward A's:
-//   P.xz = E.xz + C (A.xz - E.xz),  P.y = A.y + (1 - C)(1 - L)(E.y - A.y).
-// C is clamped to 0..0.8 and L to 0..1, so P stays between E and A.
+// The third-person head origin (camera_closer, camera_lower): positive closer
+// moves E toward focus A; negative closer extends farther. Positive lower
+// moves the remaining height toward A; negative lower extends higher. Zero
+// reproduces E. Limits are closer -1..0.8 and lower -1..1.
 void vr_third_person_origin(const float eye[3], const float at[3], float lower, float closer, float out[3]);
+
+// Optional native line-of-sight check. The callback tests the segment from the
+// source to proposed camera origin and returns the first hit position.
+typedef bool (*vr_cam_los_fn)(const float source[3], const float proposed[3], float hit[3], void *context);
 
 // The camera moved to that origin. Its heading stays; its pitch turns by as
 // much as the line to A did (lowering looks up at A). Both 0: copied unchanged.
 // No roll ever.
 void vr_game_cam_third_person(const vr_game_cam_t *cam, const float at[3], float lower, float closer,
     vr_game_cam_t *out);
+void vr_game_cam_third_person_constrained(const vr_game_cam_t *cam, const float at[3],
+    float lower, float closer, vr_cam_los_fn los, void *context, float clearance, vr_game_cam_t *out);
 
 // An eye (or the head centre) in the game's world.
 typedef struct {

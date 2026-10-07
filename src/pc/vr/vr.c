@@ -104,7 +104,7 @@ bool vr_setting_set(const char *key, double value) {
 }
 
 bool vr_setting_reset(const char *key) {
-    return vr_setting_set(key, vr_settings_default(key));
+	return vr_setting_set(key, vr_settings_default_for(&vr.settings, key));
 }
 
 void vr_settings_flush(void) {

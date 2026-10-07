@@ -15,6 +15,7 @@
 #include "vr_paths.h"
 
 static const char *const third_person_move_values[] = { "face_move", NULL };
+static const char *const defaults_profile_values[] = { "standard", "frame_personal", NULL };
 static const char *const settings_page_side_values[] = { "right", "left", "centre", NULL };
 
 // Keys that only this port has. The standard keys live in the sfvr registry.
@@ -22,12 +23,12 @@ static const sfvr_setting_key port_keys[] = {
 	// Game units per metre. Mario is 161 units tall; at 104 he is 1.55 m, life
 	// size (docs/VR_ARCHITECTURE.md section 4). Larger values make a diorama
 	// (400: Mario 0.4 m), smaller ones a giant's world (20: Mario 8 m). Live.
-	{ "world_scale", SFVR_SETTING_FLOAT, 104.0, 20.0, 400.0, NULL },
-	// The third-person head origin (after DK64): closer moves it along the line
-	// from the game camera to its look-at point (0..0.8 of the way), lower then
-	// moves the height left toward the look-at point's (0..1). Live.
-	{ "camera_closer", SFVR_SETTING_FLOAT, 0.0, 0.0, 0.8, NULL },
-	{ "camera_lower", SFVR_SETTING_FLOAT, 0.0, 0.0, 1.0, NULL },
+	{ "world_scale", SFVR_SETTING_FLOAT, 104.0, 20.0, 416.0, NULL },
+	// Signed offsets extend the native camera in both directions. Negative closer
+	// moves farther; negative lower moves higher. Collision limits only the shown view.
+	{ "camera_closer", SFVR_SETTING_FLOAT, 0.0, -1.0, 0.8, NULL },
+	{ "camera_lower", SFVR_SETTING_FLOAT, 0.0, -1.0, 1.0, NULL },
+	{ "defaults_profile", SFVR_SETTING_ENUM, 0.0, 0.0, 1.0, defaults_profile_values },
 	// standard.md section 5: Mario turns to walk where the stick points,
 	// relative to the view. SM64 has no aiming, so face_camera does not apply.
 	{ "third_person_move", SFVR_SETTING_ENUM, 0.0, 0.0, 0.0, third_person_move_values },
@@ -370,6 +371,7 @@ static void each_line(const char *text, size_t len, line_fn fn, void *user) {
 typedef struct {
 	vr_settings_t *s;
 	bool seen[VR_SETTINGS_MAX_KEYS];
+	bool valid[VR_SETTINGS_MAX_KEYS];
 	int repairs;
 } parse_state_t;
 
@@ -406,8 +408,22 @@ static void parse_line(void *user, const char *line, size_t len, int kind, const
 	}
 	else {
 		p->s->file_values[index] = v;
+		p->valid[index] = true;
 		p->repairs += clamped;
 	}
+}
+
+static void apply_profile_defaults(vr_settings_t *s, const bool *valid) {
+	int profile = vr_settings_index("defaults_profile");
+	if (profile < 0 || s->file_values[profile] != 1.0) {
+		return;
+	}
+	// A selected profile supplies only missing/invalid values. Any valid saved
+	// choice remains authoritative when a settings file is loaded.
+	int turn_mode = vr_settings_index("turn_mode");
+	int smooth_speed = vr_settings_index("smooth_turn_speed");
+	if (turn_mode >= 0 && !valid[turn_mode]) s->file_values[turn_mode] = 1.0;
+	if (smooth_speed >= 0 && !valid[smooth_speed]) s->file_values[smooth_speed] = 120.0;
 }
 
 // Schema 1 wrote the old display defaults (90 Hz, resolution_scale 1.0) into every file, so
@@ -449,6 +465,7 @@ int vr_settings_parse(vr_settings_t *s, const char *text, size_t len) {
 	each_line(text, len, parse_line, &p);
 
 	migrate(s, p.seen);
+	apply_profile_defaults(s, p.valid);
 
 	for (size_t i = 0; i < vr_settings_count(); i++) {
 		if (!p.seen[i]) {
@@ -790,6 +807,22 @@ double vr_settings_default(const char *name) {
 	return index >= 0 ? vr_settings_key((size_t)index)->def : 0.0;
 }
 
+double vr_settings_default_for(const vr_settings_t *s, const char *name) {
+	int profile = vr_settings_index("defaults_profile");
+	int index = vr_settings_index(name);
+	if (index < 0) return 0.0;
+	if (profile >= 0 && s && s->values[profile] == 1.0) {
+		if (strcmp(name, "turn_mode") == 0) return 1.0;
+		if (strcmp(name, "smooth_turn_speed") == 0) return 120.0;
+	}
+	// Defaults actions retain the selected profile; choose it explicitly in the
+	// controls page when switching profiles.
+	if (strcmp(name, "defaults_profile") == 0 && s && profile >= 0) {
+		return s->values[profile];
+	}
+	return vr_settings_key((size_t)index)->def;
+}
+
 bool vr_settings_reset(vr_settings_t *s, const char *name) {
-	return vr_settings_set(s, name, vr_settings_default(name));
+	return vr_settings_set(s, name, vr_settings_default_for(s, name));
 }

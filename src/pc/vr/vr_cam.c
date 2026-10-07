@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "sfvr/sfvr_camera.h"
 #include "vr_cam.h"
 
 static float dot3(const float a[3], const float b[3]) {
@@ -168,19 +169,8 @@ void vr_game_cam_orbit(const vr_game_cam_t *cam, const float pivot[3], float hea
     cam_from_axes(right, up, back, pos, out);
 }
 
-static float clamp01(float v, float hi) {
-    return v < 0.0f ? 0.0f : (v > hi ? hi : v);
-}
-
 void vr_third_person_origin(const float eye[3], const float at[3], float lower, float closer, float out[3]) {
-    lower = clamp01(lower, 1.0f);
-    closer = clamp01(closer, 0.8f);
-    float p[3];
-    for (int i = 0; i < 3; i++) {
-        p[i] = eye[i] + closer * (at[i] - eye[i]);
-    }
-    p[1] += lower * (at[1] - p[1]);
-    memcpy(out, p, sizeof(p));
+	sfvr_camera_origin(eye, at, closer, lower, out);
 }
 
 static float line_pitch(const float from[3], const float to[3]) {
@@ -190,16 +180,45 @@ static float line_pitch(const float from[3], const float to[3]) {
 
 void vr_game_cam_third_person(const vr_game_cam_t *cam, const float at[3], float lower, float closer,
     vr_game_cam_t *out) {
-    lower = clamp01(lower, 1.0f);
-    closer = clamp01(closer, 0.8f);
-    if (lower == 0.0f && closer == 0.0f) {
-        if (out != cam) {
-            *out = *cam;
+	vr_game_cam_third_person_constrained(cam, at, lower, closer, NULL, NULL, 0.0f, out);
+}
+
+void vr_game_cam_third_person_constrained(const vr_game_cam_t *cam, const float at[3],
+    float lower, float closer, vr_cam_los_fn los, void *context, float clearance, vr_game_cam_t *out) {
+	if (!isfinite(lower)) lower = 0.0f;
+	if (!isfinite(closer)) closer = 0.0f;
+	if (lower < SFVR_CAMERA_LOWER_MIN) lower = SFVR_CAMERA_LOWER_MIN;
+	if (lower > SFVR_CAMERA_LOWER_MAX) lower = SFVR_CAMERA_LOWER_MAX;
+	if (closer < SFVR_CAMERA_CLOSER_MIN) closer = SFVR_CAMERA_CLOSER_MIN;
+	if (closer > SFVR_CAMERA_CLOSER_MAX) closer = SFVR_CAMERA_CLOSER_MAX;
+	if (lower == 0.0f && closer == 0.0f) {
+		if (out != cam) {
+			*out = *cam;
         }
         return;
-    }
-    float pos[3];
-    vr_third_person_origin(cam->position, at, lower, closer, pos);
+	}
+	float pos[3];
+	vr_third_person_origin(cam->position, at, lower, closer, pos);
+	if (los && isfinite(clearance) && clearance > 0.0f) {
+		float hit[3];
+		float delta[3] = { pos[0] - cam->position[0], pos[1] - cam->position[1], pos[2] - cam->position[2] };
+		float length2 = delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2];
+		if (length2 > 1e-6f && los(cam->position, pos, hit, context)) {
+			float length = sqrtf(length2);
+			float t = ((hit[0] - cam->position[0]) * delta[0]
+				+ (hit[1] - cam->position[1]) * delta[1]
+				+ (hit[2] - cam->position[2]) * delta[2]) / length2;
+			if (isfinite(t) && t >= 0.0f && t <= 1.0f) {
+				float safe_t = t - clearance / length;
+				if (safe_t < 0.0f) safe_t = 0.0f;
+				for (int i = 0; i < 3; i++) pos[i] = cam->position[i] + safe_t * delta[i];
+			}
+		}
+	}
+	if (pos[0] == cam->position[0] && pos[1] == cam->position[1] && pos[2] == cam->position[2]) {
+		if (out != cam) *out = *cam;
+		return;
+	}
 
     float heading = vr_game_cam_heading(cam);
     float fy = -cam->back[1];

@@ -2,6 +2,16 @@
 // and matrix/viewport consumers without adding test hooks to production code.
 // The rest of each engine is discarded by --gc-sections.
 #include "src/game/rendering_graph_node.c"
+#include "engine/surface_collision.h"
+
+// The cinema render harness links vr_render.c without the game world or
+// collision partitions. Its camera stays at the native origin, so the real
+// production LOS callback is not invoked in this empty-scene test.
+void find_surface_on_ray(Vec3f orig, Vec3f dir, struct Surface **hit_surface, Vec3f hit_pos, f32 precision) {
+	(void)precision;
+	*hit_surface = NULL;
+	for (int i = 0; i < 3; i++) hit_pos[i] = orig[i] + dir[i];
+}
 
 // The host GL producer supplies the pass's draws; retain the real Fast3D matrix
 // and viewport consumers under separate names, without replacing their code.

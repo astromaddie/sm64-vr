@@ -66,7 +66,7 @@ static void test_table(void) {
 	// the keys the page is built for that this tree has are present
 	const char *have[] = {
 		"turn_mode", "snap_angle", "smooth_turn_speed", "vignette", "vignette_strength", "move_relative",
-		"camera_shake", "dominant_hand", "haptics", "hud_visible", "hud_distance", "hud_scale", "panel_distance",
+		"camera_shake", "dominant_hand", "defaults_profile", "haptics", "hud_visible", "hud_distance", "hud_scale", "panel_distance",
 		"resolution_scale", "refresh_rate", "world_scale", "star_select_scale", "height_offset", "seated",
 		"head_translation"
 	};
@@ -125,7 +125,7 @@ static void test_value_mapping_round_trips(void) {
 		const sfvr_setting_key *k = vr_settings_key((size_t)vr_settings_index(e->key));
 		if (e->widget == VR_MENU_SLIDER) {
 			int count = vr_menu_slider_count(e);
-			CHECK(count >= 2 && count <= 80);
+			CHECK(count >= 2 && count <= 120);
 			for (int stop = 0; stop < count; stop++) {
 				double v = vr_menu_slider_value(e, stop);
 				// Float keys hold float precision: 0.8 comes back as 0.80000001
@@ -178,25 +178,28 @@ static void test_choices(void) {
 	const vr_menu_entry_t *hand = find("dominant_hand");
 	CHECK_STR(vr_menu_choice_label(hand, 0), "Right"); // the registry's default
 	CHECK_STR(vr_menu_choice_label(find("move_relative"), 2), "Right hand");
+	const vr_menu_entry_t *profile = find("defaults_profile");
+	CHECK_STR(vr_menu_choice_label(profile, 0), "Standard");
+	CHECK_STR(vr_menu_choice_label(profile, 1), "Frame Personal");
 }
 
 static void test_sliders(void) {
 	char text[32];
 
-	// world scale shows Mario's height in metres: 161 / world_scale
+	// World scale is units/metre; the settings row shows apparent size relative
+	// to Mario's 104 units/metre baseline.
 	const vr_menu_entry_t *world = find("world_scale");
-	CHECK(strstr(world->label, "World scale") != NULL);
+	CHECK_STR(world->label, "Apparent size");
 	int stop = vr_menu_slider_stop(world, 104); // the default
-	CHECK_NEAR(vr_menu_slider_display(world, stop), 1.55, 1e-9);
+	CHECK_NEAR(vr_menu_slider_display(world, stop), 100, 1e-9);
 	vr_menu_slider_text(world, stop, text, sizeof(text));
-	CHECK_STR(text, "1.55 m");
-	CHECK_NEAR(vr_menu_slider_value(world, stop), 161.0 / 1.55, 1e-4); // stored as a float
-	CHECK_NEAR(vr_menu_slider_value(world, vr_menu_slider_stop(world, 161.0)), 161.0, 1e-9); // 1.00 m
-	CHECK_NEAR(vr_menu_slider_display(world, 0), 0.45, 1e-9);
-	CHECK(vr_menu_slider_value(world, 0) > vr_menu_slider_value(world, 10)); // taller Mario, smaller scale
+	CHECK_STR(text, "100%");
+	CHECK_NEAR(vr_menu_slider_value(world, stop), 104, 1e-9);
+	CHECK_NEAR(vr_menu_slider_display(world, 0), 25, 1e-9);
+	CHECK_NEAR(vr_menu_slider_value(world, 0), 416, 1e-9); // preserve native upper units/metre bound
 	int last = vr_menu_slider_count(world) - 1;
-	CHECK_NEAR(vr_menu_slider_display(world, last), 3.0, 1e-9);
-	CHECK(vr_menu_slider_value(world, 0) <= 2000); // inside the registry's range
+	CHECK_NEAR(vr_menu_slider_display(world, last), 520, 1e-9);
+	CHECK_NEAR(vr_menu_slider_value(world, last), 20, 1e-9); // preserve wider native apparent-size range
 
 	// percent keys: haptics 0.6 shows as 60%
 	const vr_menu_entry_t *haptics = find("haptics");

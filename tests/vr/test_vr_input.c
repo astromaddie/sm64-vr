@@ -85,13 +85,13 @@ static void test_frame_grip_binding_is_distinct_and_frame_only(void) {
     CHECK_INT(vr_input_profiles(&profiles), 3);
     int frame_grip = 0, frame_bumper = 0;
     for (int i = 0; i < profiles[0].count; i++) {
-        if (strcmp(profiles[0].paths[i], "/user/hand/left/input/squeeze/click") == 0) frame_grip++;
+        if (strcmp(profiles[0].paths[i], "/user/hand/left/input/squeeze/value") == 0) frame_grip++;
         if (strcmp(profiles[0].paths[i], "/user/hand/left/input/bumper/click") == 0) frame_bumper++;
     }
     CHECK_INT(frame_grip, 1);
     CHECK_INT(frame_bumper, 1);
     // Index and Touch keep the existing squeeze-as-bumper fallback; they do
-    // not acquire the new click grip, which would double-map the modifier.
+    // keep that scalar binding; the separate modifier action is Frame-only.
     for (int p = 1; p < 3; p++) {
         int fallback_squeeze = 0;
         for (int i = 0; i < profiles[p].count; i++) {
@@ -196,6 +196,24 @@ static void test_adjustment_rate_deadzone_and_stall_bound(void) {
     CHECK_NEAR(at_max_lower, 1, 1e-6);
     CHECK_NEAR(s.r_stick[0], 0, 1e-6); // limit does not re-enable turn/C-button input
     CHECK_NEAR(s.r_stick[1], 0, 1e-6);
+}
+
+static void test_adjustment_reaches_signed_camera_limits(void) {
+	vr_adjustment_t state;
+	vr_adjustment_init(&state);
+	float scale = 104.0f, closer = 0.0f, lower = 0.0f;
+	for (int i = 0; i <= 4 * 72; i++) {
+		vr_pad_sample_t s = adjustment_sample(0.0f, 0.0f, 1.0f);
+		vr_adjustment_apply(&state, &s, i / 72.0, true, &scale, &closer, &lower);
+	}
+	CHECK_NEAR(closer, -1.0, 1e-5); // up extends farther
+	CHECK_NEAR(lower, -1.0, 1e-5); // up extends higher
+	for (int i = 1; i <= 8 * 72; i++) {
+		vr_pad_sample_t s = adjustment_sample(0.0f, 0.0f, -1.0f);
+		vr_adjustment_apply(&state, &s, 4.0 + i / 72.0, true, &scale, &closer, &lower);
+	}
+	CHECK_NEAR(closer, 0.8, 1e-5); // down still preserves the old closer endpoint
+	CHECK_NEAR(lower, 1.0, 1e-5);
 }
 
 static void test_adjustment_gates_and_release_neutralization(void) {
@@ -323,7 +341,7 @@ static XrResult XRAPI_PTR fake_suggest(XrInstance instance, const XrInteractionP
         for (uint32_t i = 0; i < info->countSuggestedBindings; i++) {
             const char *path = fake_path_string(info->suggestedBindings[i].binding);
             int action = fake_action_index(info->suggestedBindings[i].action);
-            if (strcmp(path, "/user/hand/left/input/squeeze/click") == 0 && action >= 0
+            if (strcmp(path, "/user/hand/left/input/squeeze/value") == 0 && action >= 0
                 && strcmp(fake_input.names[action], "left_grip") == 0) fake_input.grip_bound = true;
             if (strcmp(path, "/user/hand/left/input/bumper/click") == 0 && action >= 0
                 && strcmp(fake_input.names[action], "l_bumper") == 0) fake_input.bumper_bound = true;
@@ -367,8 +385,8 @@ bool vr_setting_set(const char *key, double value) {
         : strcmp(key, "camera_closer") == 0 ? &fake_input.camera_closer
         : strcmp(key, "camera_lower") == 0 ? &fake_input.camera_lower : NULL;
     if (!slot || *slot == (float)value) return false;
-    float min = strcmp(key, "world_scale") == 0 ? 20.0f : 0.0f;
-    float max = strcmp(key, "world_scale") == 0 ? 400.0f
+    float min = strcmp(key, "world_scale") == 0 ? 20.0f : -1.0f;
+    float max = strcmp(key, "world_scale") == 0 ? 416.0f
         : strcmp(key, "camera_closer") == 0 ? 0.8f : 1.0f;
     *slot = value < min ? min : value > max ? max : (float)value;
     fake_input.settings_writes++;
@@ -449,13 +467,21 @@ static void test_fake_xr_grip_to_live_adjustment_production_path(void) {
     CHECK_INT(pad->right_x, 0);
     CHECK_INT(pad->right_y, 0);
 
-    // A neutral frame re-arms the right stick after the modifier. Outside the
-    // gameplay gate, it is again the ordinary turn input and settings stay put.
+    // The release sample is not enough: a later neutral frame is required
+    // before a still-deflected stick can become ordinary gameplay input.
     fake_input.booleans[grip] = false;
     fake_input.vectors[right] = (XrVector2f){0.0f, 0.0f};
     xr.frame.predicted_display_time += 10000000;
     vr_input_update(input, &xr, 0.6f);
     fake_input.allow_adjustment = false;
+    fake_input.vectors[right] = (XrVector2f){-1.0f, 1.0f};
+    xr.frame.predicted_display_time += 10000000;
+    vr_input_update(input, &xr, 0.6f);
+    CHECK_INT(vr_input_gamepad()->right_x, 0);
+    CHECK_INT(fake_input.settings_writes, 4);
+    fake_input.vectors[right] = (XrVector2f){0.0f, 0.0f};
+    xr.frame.predicted_display_time += 10000000;
+    vr_input_update(input, &xr, 0.6f);
     fake_input.vectors[right] = (XrVector2f){-1.0f, 1.0f};
     xr.frame.predicted_display_time += 10000000;
     vr_input_update(input, &xr, 0.6f);
@@ -479,7 +505,7 @@ static void test_fake_xr_grip_to_live_adjustment_production_path(void) {
     vr_input_update(input, &xr, 0.6f);
     CHECK_INT(vr_input_gamepad()->right_x, 32767);
 
-    // Focus loss releases all buttons and clears the transient suppression state.
+    // Focus loss releases buttons and requires a neutral right stick on return.
     fake_input.booleans[grip] = true;
     xr.focused = false;
     vr_input_update(input, &xr, 0.6f);
@@ -487,6 +513,13 @@ static void test_fake_xr_grip_to_live_adjustment_production_path(void) {
     CHECK(fake_input.haptic_stops > 0);
     xr.focused = true;
     fake_input.booleans[grip] = false;
+    xr.frame.predicted_display_time += 10000000;
+    vr_input_update(input, &xr, 0.6f);
+    CHECK_INT(vr_input_gamepad()->right_x, 0);
+    fake_input.vectors[right] = (XrVector2f){0.0f, 0.0f};
+    xr.frame.predicted_display_time += 10000000;
+    vr_input_update(input, &xr, 0.6f);
+    fake_input.vectors[right] = (XrVector2f){1.0f, 0.0f};
     xr.frame.predicted_display_time += 10000000;
     vr_input_update(input, &xr, 0.6f);
     CHECK_INT(vr_input_gamepad()->right_x, 32767);
@@ -505,6 +538,7 @@ int main(void) {
 	RUN(test_frame_grip_binding_is_distinct_and_frame_only);
 	RUN(test_adjustment_scale_camera_directions_and_consumption);
 	RUN(test_adjustment_rate_deadzone_and_stall_bound);
+	RUN(test_adjustment_reaches_signed_camera_limits);
 	RUN(test_adjustment_gates_and_release_neutralization);
 	RUN(test_adjustment_preserves_view_and_menu_pad_actions);
 	RUN(test_fake_xr_grip_to_live_adjustment_production_path);

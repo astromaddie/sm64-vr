@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "sfvr/sfvr_haptics.h"
+#include "sfvr/sfvr_adjust.h"
 #include "sfvr/sfvr_view.h"
 
 // OpenXR actions as a virtual gamepad, plus the system layer and haptics
@@ -103,11 +104,7 @@ typedef struct {
 // The right stick is consumed; a deflected right stick remains suppressed after
 // grip release until it returns to the deadzone, so turn/C-button helpers do
 // not see a false neutral followed by a still-held direction.
-typedef struct {
-    double last_display_s;
-    bool display_time_valid;
-    bool right_waiting_for_neutral;
-} vr_adjustment_t;
+typedef sfvr_adjust_state vr_adjustment_t;
 void vr_adjustment_init(vr_adjustment_t *state);
 bool vr_adjustment_apply(vr_adjustment_t *state, vr_pad_sample_t *sample,
     double predicted_display_s, bool eligible, float *world_scale,

@@ -23,6 +23,7 @@
 #include "vr_preview.h"
 #include "vr_turn.h"
 #include "pc/gfx/gfx_vr.h"
+#include "engine/surface_collision.h"
 
 // The pause menu (and the VR settings page under it) is drawn on the HUD quad
 extern bool gDjuiPanelPauseCreated;
@@ -135,6 +136,18 @@ static struct {
     int gpu_slot;
     float gpu_last_ms; // the newest finished result; -1 before the first
 } vrr;
+
+static bool vr_render_third_person_los(const float source[3], const float proposed[3], float hit[3], void *context) {
+	(void)context;
+	Vec3f origin = { source[0], source[1], source[2] };
+	Vec3f delta = { proposed[0] - source[0], proposed[1] - source[1], proposed[2] - source[2] };
+	Vec3f hit_pos;
+	struct Surface *surface = NULL;
+	find_surface_on_ray(origin, delta, &surface, hit_pos, 3.0f);
+	if (!surface) return false;
+	memcpy(hit, hit_pos, sizeof(hit_pos));
+	return true;
+}
 
 static double now_ms(void) {
     struct timespec ts;
@@ -896,7 +909,8 @@ static void comfort_frame(bool stereo, bool hold, float dt) {
         if (orbit != 0.0f) {
             vr_turn_rotate_about(at, gVrInterpPivot, orbit);
         }
-        vr_game_cam_third_person(&vrr.shown_cam, at, vrr.comfort.camera_lower, vrr.comfort.camera_closer, &vrr.shown_cam);
+        vr_game_cam_third_person_constrained(&vrr.shown_cam, at, vrr.comfort.camera_lower,
+            vrr.comfort.camera_closer, vr_render_third_person_los, NULL, 5.0f, &vrr.shown_cam);
     }
 
     // Headings: the log, the vignette

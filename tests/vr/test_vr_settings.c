@@ -79,7 +79,7 @@ static void test_registry(void) {
 		"resolution_scale", "refresh_rate", "probe_seconds", "force_render", "diag_yaw", "dump_frame", "timing",
 		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand",
 		"smooth_turn_speed", "vignette_strength", "move_relative", "height_offset", "head_translation",
-		"camera_shake", "camera_closer", "camera_lower", "third_person_move", "diag_turn_stick"
+		"camera_shake", "camera_closer", "camera_lower", "defaults_profile", "third_person_move", "diag_turn_stick"
 	};
 	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
 		CHECK(vr_settings_index(names[i]) >= 0);
@@ -87,7 +87,7 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 21);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 22);
 
 	// env names
 	char name[64];
@@ -95,6 +95,26 @@ static void test_registry(void) {
 	CHECK_STR(name, "SM64_VR_RESOLUTION_SCALE");
 	CHECK(sfvr_settings_env_name("SM64", "diag_dialog_cutscene_seconds", name, sizeof(name)));
 	CHECK_STR(name, "SM64_VR_DIAG_DIALOG_CUTSCENE_SECONDS");
+}
+
+static void test_profile_defaults_preserve_valid_saved_choices(void) {
+	vr_settings_t s;
+	parse(&s, "version = 2\n[vr]\ndefaults_profile = \"frame_personal\"\n");
+	CHECK_NEAR(get(&s, "defaults_profile"), 1, 1e-9);
+	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9); // missing key follows selected profile
+	CHECK_NEAR(get(&s, "smooth_turn_speed"), 120, 1e-9);
+	CHECK_NEAR(get(&s, "third_person_move"), 0, 1e-9); // SM64 remains ordinary third person
+	CHECK_NEAR(vr_settings_default_for(&s, "turn_mode"), 1, 1e-9);
+	CHECK(vr_settings_set(&s, "turn_mode", 0));
+	CHECK(vr_settings_reset(&s, "turn_mode"));
+	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
+	CHECK(!vr_settings_reset(&s, "defaults_profile")); // Defaults preserves the selected profile
+
+	parse(&s, "version = 2\n[vr]\ndefaults_profile = \"frame_personal\"\nturn_mode = \"snap\"\nsmooth_turn_speed = 180\n");
+	CHECK_NEAR(get(&s, "turn_mode"), 0, 1e-9); // explicit persisted values win on load
+	CHECK_NEAR(get(&s, "smooth_turn_speed"), 180, 1e-9);
+	CHECK_NEAR(vr_settings_default_for(&s, "turn_mode"), 1, 1e-9); // reset still uses selected profile
+	vr_settings_free(&s);
 }
 
 static void test_defaults_and_creation(void) {
@@ -462,7 +482,7 @@ static void test_comfort_keys(void) {
 		"third_person_move = \"face_camera\"\n"
 		"diag_turn_stick = 0.8\n";
 	CHECK(parse(&s, file) > 0);
-	CHECK_NEAR(get(&s, "world_scale"), 400, 1e-6); // clamped to 20..400
+	CHECK_NEAR(get(&s, "world_scale"), 416, 1e-6); // 25 percent baseline size
 	CHECK_NEAR(get(&s, "camera_closer"), 0.8, 1e-6); // clamped to 0..0.8
 	CHECK_NEAR(get(&s, "camera_lower"), 0.5, 1e-6);
 	CHECK_NEAR(get(&s, "turn_mode"), 1, 1e-9);
@@ -486,6 +506,13 @@ static void test_comfort_keys(void) {
 	parse(&s, "");
 	vr_settings_set(&s, "world_scale", 5.0);
 	CHECK_NEAR(get(&s, "world_scale"), 20, 1e-6);
+	vr_settings_free(&s);
+
+	parse(&s, "version = 2\n[vr]\ncamera_closer = -2\ncamera_lower = -2\n");
+	CHECK_NEAR(get(&s, "camera_closer"), -1, 1e-6);
+	CHECK_NEAR(get(&s, "camera_lower"), -1, 1e-6);
+	CHECK_NEAR(vr_settings_clamp("camera_closer", 0.95), 0.8, 1e-6);
+	CHECK_NEAR(vr_settings_clamp("camera_lower", 2), 1, 1e-6);
 	vr_settings_free(&s);
 }
 
@@ -700,6 +727,7 @@ int main(void) {
 	vr_log_set_sink(quiet);
 	RUN(test_registry);
 	RUN(test_defaults_and_creation);
+	RUN(test_profile_defaults_preserve_valid_saved_choices);
 	RUN(test_missing_keys_get_defaults);
 	RUN(test_bad_values_are_clamped_or_defaulted);
 	RUN(test_unknown_content_is_kept);

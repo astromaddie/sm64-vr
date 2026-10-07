@@ -9,6 +9,7 @@ static const char *const turn_mode_choices[] = { "Snap", "Smooth", "Off" };
 static const char *const move_relative_choices[] = { "Head", "Left hand", "Right hand" };
 static const char *const cutscene_choices[] = { "3D cinema", "Immersive" };
 static const char *const hand_choices[] = { "Right", "Left" };
+static const char *const defaults_profile_choices[] = { "Standard", "Frame Personal" };
 static const char *const snap_angle_choices[] = { "15 deg", "30 deg", "45 deg", "60 deg", "90 deg" };
 static const double snap_angle_values[] = { 15, 30, 45, 60, 90 };
 static const char *const page_side_choices[] = { "Right", "Left", "Centre" };
@@ -39,6 +40,7 @@ static const vr_menu_entry_t entries[] = {
 
 	// 2 Controls
 	CHOICE_ENUM("dominant_hand", "Dominant hand", VR_TAB_CONTROLS, hand_choices),
+	CHOICE_ENUM("defaults_profile", "Defaults profile", VR_TAB_CONTROLS, defaults_profile_choices),
 	SLIDER("haptics", "Haptics", VR_TAB_CONTROLS, 0, 100, 10, 100, "%.0f%%"),
 
 	// 3 HUD and menus
@@ -58,8 +60,8 @@ static const vr_menu_entry_t entries[] = {
 	// 5 Accessibility and audio: nothing yet
 
 	// 6 Room
-	{ .key = "world_scale", .label = "World scale (Mario)", .tab = VR_TAB_ROOM, .widget = VR_MENU_SLIDER,
-		.lo = 0.45, .hi = 3.0, .step = 0.05, .invert_units = VR_MENU_MARIO_UNITS, .format = "%.2f m" },
+	{ .key = "world_scale", .label = "Apparent size", .tab = VR_TAB_ROOM, .widget = VR_MENU_SLIDER,
+		.lo = 25, .hi = 520, .step = 5, .invert_units = VR_MENU_MARIO_SIZE_PERCENT, .format = "%.0f%%" },
 	SLIDER("star_select_scale", "Star select scale", VR_TAB_ROOM, 100, 1000, 25, 1, "%.0f"),
 	SLIDER_RANGE("camera_closer", "Camera closer", VR_TAB_ROOM, "%.2f"),
 	SLIDER_RANGE("camera_lower", "Camera lower", VR_TAB_ROOM, "%.2f"),
