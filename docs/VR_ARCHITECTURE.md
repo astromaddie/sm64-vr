@@ -282,16 +282,16 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |
 | In-headset VR settings page: tab table, value mapping (world scale as Mario's height), registered-key filter | pure test (`tests/vr/test_vr_menu.c`) |
 | Runtime settings API: set with clamping, reset, save, reload, environment overrides never written back | pure test (`tests/vr/test_vr_settings.c`) |
-| Live apply of a changed setting to the renderer (`vr_render_apply_settings`) | built, not run |
-| The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | built (arm64 package and ABI check), not rendered, not run |
-| The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | built, not run |
-| Settings page over the gameplay view: pause overview held off while the page is open, overview cut faded both ways, menu turned aside (`settings_page_side`) and eased home, game HUD left out for `hud_visible` off, `seated` on takes the height | pure test (`test_vr_preview.c`, `test_vr_stage.c`) and host render (`test_vr_cinema.c`: fade, menu yaw, `hide_hud` through `vr_render_frame`); the camera.c hook and the DJUI flag built, not run; device recipe `diag_settings_preview` not yet run |
+| Live apply of a changed setting to the renderer (`vr_render_apply_settings`) | verified unattended 2026-10-07 for world scale and camera closer through the actual Room rows; height/lower/seated/head movement have host coverage and need a wear check |
+| The DJUI panels (pause menu "VR settings", tabs, Defaults), pad navigation | actual pause/Room panels rendered unattended 2026-10-07; manual pad navigation, other tabs and Defaults remain wearer-unverified |
+| The pause menu held in the world where it opened; HUD quad kept while a menu is up even with `hud_visible` off | verified unattended 2026-10-07 for HUD-on/off placement and page visibility; tracked head movement and manual recentre remain wearer-unverified |
+| Settings page over the gameplay view: pause overview held off while the page is open, overview cut faded both ways, menu turned aside (`settings_page_side`) and eased home, game HUD left out for `hud_visible` off, `seated` on takes the height | pure/host render tests pass; production camera/DJUI sequence verified unattended 2026-10-07 with both-eye/HUD captures, right yaw -20.31 degrees, exact value restoration, and overview fades logged; seated height and tracked recentre remain wearer-unverified |
 | Cinema screen corners, positive parallax, display-time latch, stage fades, cinema projection-layer structs and settings | pure test; headset-unverified |
-| Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | verified unattended 2026-10-06 for the eye replay (`diag_cinema_seconds = 10` on the menu background: mode cinema, screen 3.0 m, 3.6 x 2.0 m, both eyes letterboxed with everything behind the screen; 120 fps). Text band and real cutscene classification: device-unverified; not worn |
+| Cinema eye replay, opaque text band below the picture, no-roll entry/recentre anchor | verified unattended 2026-10-07 in the real dialog/camera pipeline: both eyes and opaque text band inspected, classification 162/11, height-preserving recentre on exit logged; tracked/worn acceptance pending |
 | Cinema aspect and interpolated projection load | verified unattended 2026-10-07 (`diag_dialog_cutscene_seconds = 30`: cinema 162 in camera mode 11, `world_proj_loads=2` in both eyes, `picture_aspect=1.777778`; the 16:9 picture shows Mario in normal proportions, positive parallax, and gameplay stereo returns after). Root cause: VR code's `atan2f` linked to the game's own (SM64 convention) on the device only. The real King Whomp scene is not worn |
 | One-shot boss-mode dialog diagnostic | verified unattended 2026-10-07 (recipe in section 11) |
 | Mono panels and closed warps always have black projection beneath quads | pure test + host render with synthetic retained list; device/worn unverified |
-| Cinema lane Linux ARM64 VR build, staged package and glibc ABI floor | aspect fix built and packaged 2026-10-07: ELF AArch64, maximum glibc 2.34 below the 2.35 floor; all 416 package hashes verified. This fix is not deployed or worn |
+| Integrated Linux ARM64 VR build, staged package and glibc ABI floor | built, packaged and deployed 2026-10-07 from clean `7e4f10d8d`: ELF AArch64, glibc 2.34 below the 2.35 floor, all 416 file hashes verified, installed executable hash matches; not worn |
 | VR-disabled flat build and source identity of modified shared translation units | verified 2026-10-07: independent deterministic pre-preview main and integrated builds have identical executable bytes (section 12); flat game not played |
 
 ## 10. VR settings page
@@ -369,13 +369,18 @@ performance, Accessibility & audio (no entries yet, so it is not listed), Room. 
     dumps at 12 s (`resumed-`). Each dump is `<tag>vr-eye0.png`, `vr-eye1.png`, `vr-hud.png` and
     `vr-state.txt` (its `preview` line: page, overview, menu yaw, side, `hide_hud`), and each step logs a
     `settings page: diag:` line with the play mode, the overview and the two values. Run with
-    `run_unattended.sh --seconds 45 --env SM64_VR_FORCE_RENDER=1 --env SM64_VR_DIAG_SETTINGS_PREVIEW=15
-    -- --server 7777 --skip-intro` (Castle Grounds is an overview area). Expect `paused-vr-eye0.png` to
+    a booked Frame with backed-up config/save files: set `force_render = true`,
+    `diag_settings_preview = 15`, and temporary title arguments `--server 7777 --skip-intro`
+    through `deploy.sh`. Launch the registered Steam title via
+    `steam://rungameid/13598451704298209280` in `~/.steam/steam.pipe` (Castle Grounds is an overview area),
+    then allow at least 45 s after process startup. Expect `paused-vr-eye0.png` to
     be the overview, `page-` and `step-` the view Mario was in before the pause with the page turned
     right, `step-` visibly closer and larger, `resumed-` the gameplay view, `preview: ... faded` log
     lines at each overview cut, and `world_scale` / `camera_closer` back at their values at the end.
     The page writes `vr.toml` 0.5 s after a change, so the stepped values are in it from 7.5 s to 9.5 s:
-    let the run last past N + 10 s (the 45 s above with N = 15 does), and remove the key afterwards.
+    let the run last past N + 10 s. Stop the owned process, restore the original config/save bytes,
+    restore normal empty title arguments, verify the hashes and disabled diagnostics, remove task dumps,
+    and release the booking, on success or failure.
 - **Paused.** The pause menu does not stop the game loop in SM64: each XR frame still replays the newest
   tick, and the scheduler keeps ticking, so the page redraws and reads input while the game is paused.
   Nothing branches on pause in the VR loop (the DK64 lesson 99 case does not apply).
@@ -470,24 +475,54 @@ cinema separately from mono and stereo. Eye dumps are the square storage images;
 to inspect the picture as seen on the screen.
 
 For the coordinator's unattended **real dialog** check, install the integrated package and claim the
-Frame according to the port playbook, then run from the coordinator checkout:
-
-```sh
-tools/steam_frame/run_unattended.sh --seconds 40 --out build/device-dumps/cinema-dialog \
-  --env SM64_VR_FORCE_MONO=0 --env SM64_VR_CUTSCENES=0 \
-  --env SM64_VR_DIAG_CINEMA_SECONDS=0 --env SM64_VR_DIAG_DIALOG_CUTSCENE_SECONDS=30 \
-  --env SM64_VR_DUMP_FRAME=1200 --env SM64_VR_TIMING=1 \
-  -- --server 7777 --skip-intro --skip-update-check --disable-mods --no-discord
-```
-
-The runner already sets `force_render`. Confirm the diagnostic armed log and `vr-state.txt`:
+Frame according to the port playbook. Preserve config/save hashes, then temporarily configure
+`force_render = true`, `force_mono = false`, `cutscenes = 0`, `diag_cinema_seconds = 0`,
+`diag_settings_preview = 0`, `diag_dialog_cutscene_seconds = 30`, `dump_frame = 1200` and `timing = true`.
+Register temporary `--server 7777 --skip-intro` title arguments and launch through Steam
+(`steam://rungameid/13598451704298209280` into `~/.steam/steam.pipe`), allowing at least 45 s after
+process startup. Confirm the diagnostic armed log and `vr-state.txt`:
 `mode cinema`, `cutscene=162`, `camera_mode=11`, nonzero world projection loads in **both** eyes,
 `picture_aspect=1.777778`, and screen height = width × 9/16. Compare both PNGs resized to 16:9,
 including the sky, Mario's proportions and the opaque dialogue band; expiry should restore gameplay.
-These env overrides last only for that run. It exercises the real camera/dialog pipeline in the
+After stopping the owned process, restore config/save bytes and empty title arguments, verify hashes
+and disabled diagnostics, remove task dumps and release the booking even on failure. This exercises
+the real camera/dialog pipeline in the
 current scene, not King Whomp's actual encounter or controller input. Wear check: talk to King Whomp
 at the summit, then a sign/NPC, Bob-omb King and Bowser; confirm stable proportions, readable text,
 stereo depth, and correct entry/exit/recentre.
+
+
+### Integrated device verification, 2026-10-07
+
+The installed source is clean `7e4f10d8db8a8b3457bfa36b7153633c3ca019d6`; package and installed
+executable SHA256 are `92230b67ceec6e6471473013fa79ae60c1b16105319ab61d5436f85728e2623e`.
+All 416 package payload hashes and executable/bundled-library ABI/dependency checks pass.
+
+Three runs used the existing Steam title, 2160 x 2160 eyes at a runtime period of 8.33 ms, with the
+headset on the desk and `force_render` synthetic views (tracked stereo frames: 0):
+
+| Capture | Observed production behavior |
+| --- | --- |
+| Preview, HUD on | `paused-`: overview=1, page=0, comfort play=0. `page-`: overview=0, page=1, play=1, right menu yaw=-20.31 degrees. `step-`: world_scale=201.25, closer=0.40. Exact restore to 104/0; `resumed-`: page/menu/overview=0. Page and resumed game-camera position/back are identical |
+| Preview, HUD off | All four both-eye/HUD/state captures repeat the sequence; open page remains visible with hide_hud=1 and gameplay counters absent, resumed HUD hidden |
+| Boss-dialog cinema | Cutscene 162, camera mode 11, screen 3.6 x 2.025 m, picture_aspect=1.777778, world_proj_loads=2 in each eye. Both 16:9 picture reconstructions and the complete text band inspected. Diagnostic expires, camera mode 16 and stereo return, height-preserving recentre logged |
+
+Preview overview entry/exit/page cuts log the stage fade; still captures are after its black interval.
+The panel composites use the submitted poses/FOVs and HUD straight alpha; they do not simulate lens
+distortion or establish depth/comfort acceptance in the headset. The diagnostic uses King Whomp's
+text with Mario as the speaking-object focus, not the actual Whomp encounter.
+
+Capture windows include frame-rate dips (about 92-106 fps in the preview run). Initial/post-capture
+refresh windows recover to 120.1 fps; the cinema run has two post-return windows at 120 fps with zero
+missed frames (GPU 3.25-3.36 ms). These are unattended measurements, not worn performance acceptance.
+
+Original `vr.toml`, `sm64config.txt`, save, ROM and pre-existing run-log hashes were verified after
+restoration. Normal title arguments are `LAUNCH-STEAM-FRAME.sh` only, diagnostic keys disabled, no
+SM64 process/task dumps remain on the device, and the Frame booking was released.
+
+Wear acceptance remains pending: live height/lower/head movement/seated changes, tracked recentre,
+pad navigation and panel readability/comfort, pause/resume transitions, and the real King Whomp
+introduction. The short checklist in section 10 covers the settings portion.
 
 ### Cutscene policy
 
@@ -598,7 +633,7 @@ mismatch gate with a mock container command.
 The 2026-10-07 integrated comparison passed against `fcb49579d`: both full AArch64 flat executables
 have SHA256 `f139a1287a55561ac2bd153ebf5e37e55b0516018ccb5ccc63bff5267be8f04d`.
 This is deterministic binary parity, not a flat gameplay test. The earlier comparison with debug
-line tables retained failed as expected because the source line numbers changed.
+line tables retained included changed source-line metadata and did not match.
 
 Package provenance is resolved on the host before entering Docker, with a validated source SHA and
 `clean`/`dirty` state including ordinary untracked files, then passed to the package script. Direct
