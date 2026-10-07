@@ -85,6 +85,7 @@ typedef struct {
     bool l_bumper, r_bumper;
     bool menu; // R Menu
     bool view; // L View, the raw level; the system layer makes BACK from it
+    bool l_grip; // Steam Frame left grip modifier (not the fallback bumper/squeeze mapping)
     bool l_stick_press, r_stick_press;
     bool dpad_up, dpad_down, dpad_left, dpad_right;
     float l_trigger, r_trigger; // 0..1
@@ -96,6 +97,21 @@ typedef struct {
     sfvr_view_config view_config;
     int back_reads_left; // reads the BACK pulse stays down for
 } vr_pad_t;
+
+// Live settings shortcut. While eligible and left grip is held, right stick X
+// changes world_scale and right stick Y changes camera_closer/camera_lower.
+// The right stick is consumed; a deflected right stick remains suppressed after
+// grip release until it returns to the deadzone, so turn/C-button helpers do
+// not see a false neutral followed by a still-held direction.
+typedef struct {
+    double last_display_s;
+    bool display_time_valid;
+    bool right_waiting_for_neutral;
+} vr_adjustment_t;
+void vr_adjustment_init(vr_adjustment_t *state);
+bool vr_adjustment_apply(vr_adjustment_t *state, vr_pad_sample_t *sample,
+    double predicted_display_s, bool eligible, float *world_scale,
+    float *camera_closer, float *camera_lower);
 
 void vr_pad_init(vr_pad_t *pad);
 

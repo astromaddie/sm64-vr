@@ -30,6 +30,7 @@ static struct {
     struct DjuiBase* widget;
 } sRows[MAX_ROWS];
 static int sRowCount = 0;
+static unsigned int sRowsRevision = 0;
 
 static const char* sTabShortNames[VR_TAB_COUNT] = {
     [VR_TAB_COMFORT] = "Comfort",
@@ -106,11 +107,21 @@ static void djui_panel_vr_row_refresh(int row) {
     }
 }
 
+static void djui_panel_vr_rows_render_pre(UNUSED struct DjuiBase* base, UNUSED bool* skipRender) {
+    unsigned int revision = vr_settings_revision();
+    if (revision == sRowsRevision) { return; }
+    sRowsRevision = revision;
+    for (int row = 0; row < sRowCount; row++) {
+        djui_panel_vr_row_refresh(row);
+    }
+}
+
 static void djui_panel_vr_defaults(UNUSED struct DjuiBase* caller) {
     for (int row = 0; row < sRowCount; row++) {
         vr_setting_reset(vr_menu_entry(sRows[row].entry)->key);
         djui_panel_vr_row_refresh(row);
     }
+    sRowsRevision = vr_settings_revision();
 }
 
 static void djui_panel_vr_button(struct DjuiBase* caller) {
@@ -163,6 +174,7 @@ static void djui_panel_vr_add_row(struct DjuiBase* body, size_t entry) {
         }
     }
     sRows[row].widget->tag = row;
+    sRows[row].widget->on_render_pre = djui_panel_vr_rows_render_pre;
 }
 
 static void djui_panel_vr_tab_open(struct DjuiBase* caller, vr_menu_tab_t tab) {
@@ -178,6 +190,7 @@ static void djui_panel_vr_tab_open(struct DjuiBase* caller, vr_menu_tab_t tab) {
         for (size_t i = 0; i < count; i++) {
             djui_panel_vr_add_row(body, entries[i]);
         }
+        sRowsRevision = vr_settings_revision();
 
         djui_button_create(body, "Defaults", DJUI_BUTTON_STYLE_NORMAL, djui_panel_vr_defaults);
         djui_button_create(body, DLANG(MENU, BACK), DJUI_BUTTON_STYLE_BACK, djui_panel_menu_back);
@@ -268,6 +281,7 @@ void djui_panel_vr_diag_tick(u16* buttons) {
             // The exact values, not the nearest stops, then the rows show them
             for (int i = 0; i < 2; i++) { vr_setting_set(sDiagKeys[i], sDiagSaved[i]); }
             for (int row = 0; row < sRowCount; row++) { djui_panel_vr_row_refresh(row); }
+            sRowsRevision = vr_settings_revision();
             break;
         case VR_PREVIEW_DIAG_CLOSE:
             if (gDjuiPanelPauseCreated) { djui_panel_shutdown(); }

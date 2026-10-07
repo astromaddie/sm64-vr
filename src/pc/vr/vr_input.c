@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "vr_input.h"
+#include "vr_runtime_api.h"
 #include "vr_log.h"
 #include "vr_math.h"
 #include "vr_xr.h"
@@ -141,6 +142,87 @@ void vr_pad_release(vr_pad_t *pad, vr_gamepad_t *out) {
     pad->back_reads_left = 0;
 }
 
+#define VR_ADJUST_DEADZONE 0.20f
+#define VR_ADJUST_MAX_DT 0.03333333333333333
+#define VR_ADJUST_SCALE_FACTOR_PER_S 1.5f
+#define VR_ADJUST_CAMERA_PER_S 0.25f
+
+static float adjustment_axis(float value) {
+    float magnitude = fabsf(value);
+    if (magnitude <= VR_ADJUST_DEADZONE) {
+        return 0.0f;
+    }
+    float scaled = (magnitude - VR_ADJUST_DEADZONE) / (1.0f - VR_ADJUST_DEADZONE);
+    return copysignf(scaled, value);
+}
+
+void vr_adjustment_init(vr_adjustment_t *state) {
+    memset(state, 0, sizeof(*state));
+}
+
+bool vr_adjustment_apply(vr_adjustment_t *state, vr_pad_sample_t *sample,
+    double display_s, bool eligible, float *world_scale,
+    float *camera_closer, float *camera_lower) {
+    double dt = 0.0;
+    if (isfinite(display_s)) {
+        if (state->display_time_valid && display_s >= state->last_display_s) {
+            dt = display_s - state->last_display_s;
+            if (dt > VR_ADJUST_MAX_DT) dt = VR_ADJUST_MAX_DT;
+        }
+        state->last_display_s = display_s;
+        state->display_time_valid = true;
+    } else {
+        state->display_time_valid = false;
+    }
+
+    bool modifier = eligible && sample->l_grip;
+    bool adjust = modifier && !sample->menu && !sample->view;
+    bool changed = false;
+    if (adjust && dt > 0.0) {
+        float world = adjustment_axis(sample->r_stick[0]);
+        float camera = adjustment_axis(sample->r_stick[1]);
+        // world_scale is inverse apparent size: left increases units/metre
+        // (smaller world), right decreases it (larger world). Exponential scale
+        // steps feel proportional at every size. Vertical up moves the camera
+        // farther and higher by reducing both coupled offsets.
+        if (world != 0.0f) {
+            float before = *world_scale;
+            *world_scale *= expf(-world * logf(VR_ADJUST_SCALE_FACTOR_PER_S) * (float)dt);
+            if (*world_scale < 20.0f) *world_scale = 20.0f;
+            if (*world_scale > 400.0f) *world_scale = 400.0f;
+            changed |= *world_scale != before;
+        }
+        if (camera != 0.0f) {
+            float step = camera * VR_ADJUST_CAMERA_PER_S * (float)dt;
+            float before_closer = *camera_closer;
+            float before_lower = *camera_lower;
+            *camera_closer -= step;
+            *camera_lower -= step;
+            if (*camera_closer < 0.0f) *camera_closer = 0.0f;
+            if (*camera_closer > 0.8f) *camera_closer = 0.8f;
+            if (*camera_lower < 0.0f) *camera_lower = 0.0f;
+            if (*camera_lower > 1.0f) *camera_lower = 1.0f;
+            changed |= *camera_closer != before_closer || *camera_lower != before_lower;
+        }
+    }
+
+    if (modifier) {
+        if (fabsf(sample->r_stick[0]) > VR_ADJUST_DEADZONE
+            || fabsf(sample->r_stick[1]) > VR_ADJUST_DEADZONE) {
+            state->right_waiting_for_neutral = true;
+        }
+        sample->r_stick[0] = sample->r_stick[1] = 0.0f;
+    } else if (state->right_waiting_for_neutral) {
+        if (fabsf(sample->r_stick[0]) <= VR_ADJUST_DEADZONE
+            && fabsf(sample->r_stick[1]) <= VR_ADJUST_DEADZONE) {
+            state->right_waiting_for_neutral = false;
+        } else {
+            sample->r_stick[0] = sample->r_stick[1] = 0.0f;
+        }
+    }
+    return changed;
+}
+
 static vr_pad_t *sPadState = NULL;
 
 void vr_input_pad_consumed(void) {
@@ -165,6 +247,7 @@ enum {
     ACT_R_BUMPER,
     ACT_MENU,
     ACT_VIEW,
+    ACT_L_GRIP,
     ACT_L_STICK_PRESS,
     ACT_R_STICK_PRESS,
     ACT_DPAD_UP,
@@ -195,6 +278,7 @@ static const struct {
     [ACT_R_BUMPER] = { "r_bumper", "Right bumper (R, camera)", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_MENU] = { "menu", "Menu (Start, pause)", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_VIEW] = { "view", "View (back, hold to recentre)", XR_ACTION_TYPE_BOOLEAN_INPUT },
+    [ACT_L_GRIP] = { "left_grip", "Left grip (hold for live settings)", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_L_STICK_PRESS] = { "l_stick_press", "Left stick click (Z)", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_R_STICK_PRESS] = { "r_stick_press", "Right stick click", XR_ACTION_TYPE_BOOLEAN_INPUT },
     [ACT_DPAD_UP] = { "dpad_up", "D-pad up", XR_ACTION_TYPE_BOOLEAN_INPUT },
@@ -240,6 +324,7 @@ static const binding_t frame_bindings[] = {
     { ACT_R_TRIGGER, R_ "input/trigger/value" },
     { ACT_MENU, R_ "input/menu/click" },
     { ACT_VIEW, L_ "input/view/click" },
+    { ACT_L_GRIP, L_ "input/squeeze/click" },
     { ACT_L_STICK_PRESS, L_ "input/thumbstick/click" },
     { ACT_R_STICK_PRESS, R_ "input/thumbstick/click" },
     { ACT_DPAD_UP, L_ "input/dpad_up/click" },
@@ -322,6 +407,7 @@ struct vr_input {
     XrAction action[ACT_COUNT];
     XrSpace aim_space[2]; // the hands' aim poses (move_relative); XR_NULL_HANDLE when unavailable
     vr_pad_t pad;
+    vr_adjustment_t adjustment;
     bool active; // the last update had focus
 };
 
@@ -367,6 +453,7 @@ vr_input_t *vr_input_create(struct vr_xr *xr) {
         return NULL;
     }
     vr_pad_init(&in->pad);
+    vr_adjustment_init(&in->adjustment);
 
     XrActionSetCreateInfo asci = { .type = XR_TYPE_ACTION_SET_CREATE_INFO };
     snprintf(asci.actionSetName, sizeof(asci.actionSetName), "sm64");
@@ -500,6 +587,7 @@ static bool sync_and_sample(struct vr_xr *xr, vr_input_t *in, vr_pad_sample_t *s
     s->r_bumper = get_bool(xr, in, ACT_R_BUMPER);
     s->menu = get_bool(xr, in, ACT_MENU);
     s->view = get_bool(xr, in, ACT_VIEW);
+    s->l_grip = get_bool(xr, in, ACT_L_GRIP);
     s->l_stick_press = get_bool(xr, in, ACT_L_STICK_PRESS);
     s->r_stick_press = get_bool(xr, in, ACT_R_STICK_PRESS);
     s->dpad_up = get_bool(xr, in, ACT_DPAD_UP);
@@ -557,6 +645,7 @@ void vr_input_update(vr_input_t *in, struct vr_xr *xr, float haptics) {
         // buzzes, and a held View press does not count
         sHandValid[0] = sHandValid[1] = false;
         vr_pad_release(&in->pad, &sPad);
+        vr_adjustment_init(&in->adjustment);
         sfvr_haptic_queue_clear(&sHaptics);
         sRumble.on = false;
         if (in->active && xr->session != XR_NULL_HANDLE) {
@@ -568,6 +657,18 @@ void vr_input_update(vr_input_t *in, struct vr_xr *xr, float haptics) {
     in->active = true;
 
     double now_s = (double)xr->frame.predicted_display_time * 1e-9;
+    float world_scale = (float)vr_setting_get("world_scale");
+    float camera_closer = (float)vr_setting_get("camera_closer");
+    float camera_lower = (float)vr_setting_get("camera_lower");
+    float old_world_scale = world_scale;
+    float old_camera_closer = camera_closer;
+    float old_camera_lower = camera_lower;
+    if (vr_adjustment_apply(&in->adjustment, &sample, now_s,
+            vr_render_adjustment_allowed(), &world_scale, &camera_closer, &camera_lower)) {
+        if (world_scale != old_world_scale) vr_setting_set("world_scale", world_scale);
+        if (camera_closer != old_camera_closer) vr_setting_set("camera_closer", camera_closer);
+        if (camera_lower != old_camera_lower) vr_setting_set("camera_lower", camera_lower);
+    }
     vr_pad_map(&in->pad, &sample, now_s, &sPad);
 
     // The hands' aim yaws (move_relative)

@@ -797,6 +797,13 @@ static void cam_logf(const char *fmt, ...) {
 }
 
 // The keys of the comfort set and the rig, live: the settings page may change them
+bool vr_render_adjustment_allowed(void) {
+    // vrr.play already excludes title/menu, star select, cinema, pause overview,
+    // and transition holds. The explicit pause-panel check allows only the
+    // settings page's gameplay preview while a pause panel is present.
+    return vrr.play && (!gDjuiPanelPauseCreated || gVrSettingsPage.open);
+}
+
 static void comfort_refresh(void) {
     const vr_settings_t *settings = vr_settings();
     if (settings == NULL) {

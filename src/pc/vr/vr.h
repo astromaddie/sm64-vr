@@ -8,6 +8,7 @@
 
 #include "vr_types.h"
 #include "vr_settings.h"
+#include "vr_runtime_api.h"
 
 // The VR host as pc_main.c sees it (SM64_VR builds only;
 // docs/VR_ARCHITECTURE.md section 3). Per XR frame:
@@ -40,8 +41,6 @@ const vr_settings_t *vr_settings(void);
 // renderer's settings are rebuilt, and everything that reads vr_settings() or
 // vr_setting_get() each frame sees it) and written to vr.toml shortly after the
 // last change (vr_settings_flush() writes at once). All of these are for the game thread.
-double vr_setting_get(const char *key); // effective value; 0 for an unknown key
-bool vr_setting_set(const char *key, double value); // false when unknown or unchanged
 bool vr_setting_reset(const char *key); // back to the default
 void vr_settings_flush(void); // save now if anything changed
 unsigned vr_settings_revision(void); // counts changes, for code that caches a setting

@@ -723,6 +723,7 @@ static void test_renderer_routing_and_images(void) {
     render_at(12 * SEC);
     layers = render_at(12 * SEC + 60000000);
     CHECK_INT(vr_render_info()->mode, VR_MODE_CINEMA);
+    CHECK(!vr_render_adjustment_allowed()); // authored cinema never accepts the modifier
     CHECK(layers.projection && !layers.panel);
     layers = render_at(14 * SEC);
     CHECK_INT(vr_render_info()->mode, VR_MODE_MONO);
@@ -739,11 +740,13 @@ static void test_renderer_routing_and_images(void) {
     render_at(20 * SEC);
     layers = render_at(21 * SEC);
     CHECK_INT(vr_render_info()->mode, VR_MODE_STEREO);
+    CHECK(vr_render_adjustment_allowed()); // live gameplay
     CHECK_NEAR(layers.fade_alpha, 0, 0);
     float head_yaw = vr_yaw_of(head.orientation);
     gDjuiPanelPauseCreated = true;
     gVrTick.pause_overview = true;
     layers = render_at(22 * SEC);
+    CHECK(!vr_render_adjustment_allowed()); // ordinary pause overview
     CHECK_NEAR(layers.fade_alpha, 1, 0); // into the overview
     CHECK(layers.hud);
     CHECK_NEAR(vr_yaw_of(layers.hud_pose.orientation), head_yaw, 1e-4);
@@ -755,6 +758,7 @@ static void test_renderer_routing_and_images(void) {
     CHECK_NEAR(layers.fade_alpha, 0, 0);
     gVrTick.pause_overview = false;
     layers = render_at(24 * SEC + SEC / 30);
+    CHECK(vr_render_adjustment_allowed()); // settings page preview over gameplay
     CHECK_NEAR(layers.fade_alpha, 1, 0); // back to the play camera, faded
     float target = vr_preview_menu_target(VR_PREVIEW_SIDE_RIGHT, vr_preview_page_half(layers.hud_width, render.hud_distance));
     CHECK(target < -15.0f * (float)M_PI / 180.0f);
@@ -763,6 +767,7 @@ static void test_renderer_routing_and_images(void) {
     CHECK(layers.hud); // the page itself stays
     gVrSettingsPage.open = false; // Back to the pause menu: home again at a panel's pace
     layers = render_at(25 * SEC);
+    CHECK(!vr_render_adjustment_allowed()); // ordinary pause menu remains gated
     float yaw = vr_yaw_of(layers.hud_pose.orientation);
     CHECK(yaw > head_yaw + target + 1e-3f && yaw < head_yaw - 1e-3f);
     for (int i = 1; i <= 4; i++) {

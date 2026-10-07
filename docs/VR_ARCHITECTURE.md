@@ -131,6 +131,27 @@ and C-right (its own camera swing) are on the D-pad's left and right (the Frame 
 no D-pad, so there they need `turn_mode = off`, which gives the stick back to them). C-up and C-down stay
 on right stick Y.
 
+**Live adjustment shortcut (Steam Frame).** Hold left grip to adjust the view with the right stick:
+left/right shrinks/grows the world; up/down raises and distances or lowers and closes the camera.
+The grip is the profile's separate boolean `/user/hand/left/input/squeeze/click`, following
+[Valve's controller input profile](https://partner.steamgames.com/doc/steamhardware/steamframe/input).
+The bumper and trigger retain their existing actions. Index and Touch keep their squeeze-to-bumper
+mapping and have no grip shortcut.
+
+Scale uses `world_scale` (units per metre, inverse apparent size) and changes proportionally at
+1.5x per second at full deflection. Vertical adjustment changes `camera_closer` and `camera_lower`
+together at 0.25 per second. A 20% deadzone and predicted display time make partial deflection slower
+and the rate independent of refresh. Values stop at their existing limits; up returns to the original
+higher/farther game camera at zero, and cannot extend beyond it. Changes apply immediately and save
+after the usual quiet interval. The open settings page refreshes its rows when values change.
+
+The shortcut works in gameplay and the settings page's gameplay preview. The right stick is consumed
+while grip is held, preventing comfort turns and C-button actions; after release it stays muted until
+centred. The left stick continues to move Mario. Title/menu, cinema and ordinary pause states keep
+their existing input. Menu and View remain available, and either prevents simultaneous adjustment.
+Focus loss releases input and clears the transient modifier state. Physical control and comfort
+acceptance remain headset-unverified.
+
 **Movement (`move_relative`, `third_person_move`).** In stereo play Mario's stick is relative to what the
 wearer sees: `mario.c` adds to the camera's yaw the turn still queued and the yaw of the head (`head`, the
 default) or of the left or right hand's aim pose (`left`, `right`; the head when the hand is not tracked),
@@ -248,6 +269,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
    - Turn the head 90 degrees and push forward: Mario walks where the head points.
    - Recentre (hold L View 1 s, buzz) facing sideways; duck: the view lowers; hold 3 s (second buzz): the
      duck becomes the standing height. `seated = true` sitting down: the view stays at the camera.
+   - Hold left grip and move the right stick left/right to shrink/grow the world, then up/down to raise/distance or lower/close the camera. Check changes stop at their limits, the right stick cannot turn or press C-up/down while held, Mario still moves from the left stick, and a held right stick does not turn on release until centred.
    - `camera_closer = 0.4`, `camera_lower = 0.5`, `world_scale` 60 and 200: any of them uncomfortable or
      clipping into walls?
    - Haptics on the game's rumble.
@@ -273,6 +295,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Star select in stereo, warp transitions with a fade quad | headset-unverified |
 | fov_mode 3 (the Frame's measured full fov) | headset-unverified |
 | Frame controller input, haptics | headset-unverified |
+| Left grip + right stick live scale/camera shortcut and open settings-row sync | host input and renderer tests pass (126 input checks, 72/90/120 Hz parity); physical input and comfort remain headset-unverified |
 | Snap and smooth turning handed to the game camera in one step (protocol simulated with the camera's interpolation; snap instant once, smooth rate exact), radial bound, idle hold | verified unattended 2026-10-06 (Castle Grounds, `diag_turn_stick = 1`: a 30 degree snap stepped the shown heading 90 to 120 in one frame and the game camera arrived the next tick, no swing; at 120 Hz, 0 missed). Afterwards Lakitu drifted back about 8 degrees over a few seconds with Mario idle, and the view followed (vanilla). Not worn |
 | Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
 | `world_scale` 20 to 400, `camera_closer`, `camera_lower`, `height_offset` (rig maths, contract, IPD, default bit parity) | pure test |
