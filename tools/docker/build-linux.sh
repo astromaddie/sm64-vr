@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds SM64 VR for Linux inside the pinned environment from linux.Dockerfile. The target
-# architecture is the Docker host's: arm64 on Apple Silicon, which is the Steam Frame's.
+# Builds SM64 VR for Linux inside the pinned environment from linux.Dockerfile. Set
+# DOCKER_PLATFORM=linux/arm64 to target the Steam Frame from an x86-64 Docker host with ARM64
+# emulation enabled.
 #
 #   docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker
 #   tools/docker/build-linux.sh [step]
@@ -16,11 +17,23 @@ set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 image="${SM64_VR_IMAGE:-sm64-vr-linux}"
+docker_platform="${DOCKER_PLATFORM:-}"
 step="${1:-all}"
 jobs="${JOBS:-8}"
 
+build_image() {
+	if [[ -n "$docker_platform" ]]; then
+		docker buildx build --platform "$docker_platform" --load -t "$image" \
+			-f "$repo/tools/docker/linux.Dockerfile" "$repo/tools/docker"
+	else
+		docker build -t "$image" -f "$repo/tools/docker/linux.Dockerfile" "$repo/tools/docker"
+	fi
+}
+
 in_container() {
-	docker run --rm -v "$repo":/src -w /src "$image" bash -c "set -euo pipefail; $1"
+	local platform_args=()
+	[[ -z "$docker_platform" ]] || platform_args+=(--platform "$docker_platform")
+	docker run ${platform_args[@]+"${platform_args[@]}"} --rm -v "$repo":/src -w /src "$image" bash -c "set -euo pipefail; $1"
 }
 
 source_revision() {
@@ -61,7 +74,9 @@ step_package() {
 	local revision tree
 	revision="$(source_revision)"
 	tree="$(source_tree_state)"
-	docker run --rm -v "$repo":/src -w /src \
+	local platform_args=()
+	[[ -z "$docker_platform" ]] || platform_args+=(--platform "$docker_platform")
+	docker run ${platform_args[@]+"${platform_args[@]}"} --rm -v "$repo":/src -w /src \
 		-e "SOURCE_REVISION=$revision" -e "SOURCE_TREE=$tree" \
 		"$image" bash -c 'set -euo pipefail; tools/package_linux.sh build/us_pc_vr build/package/SM64VR > /dev/null && echo staged build/package/SM64VR'
 }
@@ -75,6 +90,7 @@ step_verify() {
 }
 
 case "$step" in
+	image) build_image ;;
 	on) step_on ;;
 	tests) step_tests ;;
 	package) step_package ;;

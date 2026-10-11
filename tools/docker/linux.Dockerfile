@@ -1,11 +1,12 @@
 # The pinned Linux build environment for SM64 VR, after the WipEout VR and F-Zero X ports':
 # Ubuntu 22.04 (glibc 2.35, the release floor), gcc-12, CMake 3.31.6, SDL2 2.30.x built from
 # source with x11, and the OpenXR loader from OpenXR-SDK release-1.1.63, built as a static
-# library. The image builds for the Docker host's architecture, so on an Apple Silicon Mac
-# (Colima) it is arm64, the Steam Frame's.
+# library. The image builds for the BuildKit target platform. Use buildx with
+# --platform linux/arm64 and emulation to build the Steam Frame package from x86-64.
 #
-#   docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker
-#   tools/docker/build-linux.sh
+#   docker buildx build --platform linux/arm64 --load -t sm64-vr-linux \
+#     -f tools/docker/linux.Dockerfile tools/docker
+#   tools/docker/build-linux.sh on
 ARG BASE_IMAGE=ubuntu:22.04
 FROM ${BASE_IMAGE}
 

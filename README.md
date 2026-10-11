@@ -16,23 +16,7 @@ The [architecture notes](docs/VR_ARCHITECTURE.md) describe the camera, settings 
 
 ## Build and install
 
-Build with Docker using the repository's Linux build image:
-
-```sh
-git clone --recurse-submodules --branch main https://github.com/astromaddie/sm64-vr.git
-cd sm64-vr
-docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker
-tools/docker/build-linux.sh on
-tools/docker/build-linux.sh package
-```
-
-Install the package on your Frame with your own game image:
-
-```sh
-tools/steam_frame/deploy.sh --rom /path/to/your-us-image
-```
-
-The deploy script checks the image against the pinned US game image and stores it under `~/.local/share/SM64VR/`. Launch the registered title from Steam so SteamVR supplies the controller bindings.
+The [Steam Frame build and install guide](docs/STEAM-FRAME-BUILD-INSTALL.md) covers ARM64 Docker builds from Linux, macOS, or Windows through WSL2, the supported game image, package output, first installation and Steam launch. It distinguishes the standalone Linux ARM64 Frame package from Windows or desktop builds.
 
 ## Credits and licenses
 
