@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "milestone": "PR0",
+  "status": "EXPERIMENTAL",
+  "publication_status": "private preparation; no release published",
+  "tested_commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
+  "supported_targets": [
+    "Linux ARM64 / SteamLinuxRuntime_4-arm64 / SteamVR OpenXR"
+  ],
+  "validation": {
+    "commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
+    "initial_fresh_clone_status": "clean",
+    "commands": [
+      "bash tools/docker/build-linux.sh tests",
+      "docker run --rm -v <fresh-checkout>:/src -w /src sm64-vr-linux bash -lc 'mkdir -p build/us_pc_vr/src/pc/discord && make -j1 VR=1 build/us_pc_vr/src/pc/discord/discord.o'"
+    ],
+    "image": "sm64-vr-linux sha256:7dfcba917a9a85b39b75efb5ab063cd1aa08d9ed2e2c5381ee92be0a65fdcdea linux/arm64",
+    "results": {
+      "host_tests": "PASS; tests/vr/run_all.sh; 15 suites including 8,309 cinema checks, zero failures",
+      "discord_object_compile": "PASS; src/pc/discord/discord.c compiled to build/us_pc_vr/src/pc/discord/discord.o",
+      "full_build": "NOT RUN"
+    }
+  },
+  "full_application_build": "not run for PR0",
+  "focused_headset_acceptance": "pending for a clean candidate; historical results are documented separately",
+  "sustained_worn_performance": "unmeasured on current candidate",
+  "distribution_blockers": [
+    "Commercial-source license unresolved",
+    "Historical OAuth log blobs require credential review and authorized history cleanup",
+    "Historical audio provenance unresolved"
+  ],
+  "license_scope": "Retained component notices apply to their stated code; they do not grant redistribution rights to commercial ROMs, extracted media, saves or proprietary libraries.",
+  "changelog": "README.md#pr0-changelog"
+}
