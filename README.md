@@ -2,7 +2,7 @@
 
 This is my Steam Frame fork of [SM64CoopDX](https://github.com/coop-deluxe/sm64coopdx). It runs natively on the headset through SteamLinuxRuntime_4-arm64, SteamVR OpenXR and GLX/Zink; no gaming PC or streaming is needed.
 
-**EXPERIMENTAL.** This is a personal-use port preview and remains a work in progress. It targets the Valve Steam Frame. You need your own legally obtained US Super Mario 64 game image; no game data is included. This repository contains the source and build tools, not a release package.
+**EXPERIMENTAL.** I made this for personal use on the Valve Steam Frame, and it is still a work in progress. You need your own legally obtained US Super Mario 64 game image; no game data is included. This repository contains the source and build tools, not a release package.
 
 ## What this fork adds
 

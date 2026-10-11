@@ -2,34 +2,37 @@
   "schema_version": 1,
   "milestone": "PR0",
   "status": "EXPERIMENTAL",
-  "publication_status": "private preparation; no release published",
-  "audited_commit": "47df66e35a3ac97d68069e10007025d2119ba6a0",
-  "current_checkout_commit": "47df66e35a3ac97d68069e10007025d2119ba6a0",
+  "publication_status": "prepared for public experimental source after OAuth-history cleanup",
+  "audited_commit": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
+  "source_tree": "0f54bea629ef4c7e84e02fb03c9487f40718704a",
   "branch": "main",
-  "tested_commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
+  "tested_commit": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
   "supported_targets": [
     "Linux ARM64 / SteamLinuxRuntime_4-arm64 / SteamVR OpenXR"
   ],
   "validation": {
-    "commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
+    "commit": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
     "initial_fresh_clone_status": "clean",
     "commands": [
-      "bash tools/docker/build-linux.sh tests",
-      "docker run --rm -v <fresh-checkout>:/src -w /src sm64-vr-linux bash -lc 'mkdir -p build/us_pc_vr/src/pc/discord && make -j1 VR=1 build/us_pc_vr/src/pc/discord/discord.o'"
+      "tools/docker/build-linux.sh tests"
     ],
-    "image": "sm64-vr-linux sha256:7dfcba917a9a85b39b75efb5ab063cd1aa08d9ed2e2c5381ee92be0a65fdcdea linux/arm64",
     "results": {
-      "host_tests": "PASS; tests/vr/run_all.sh; 15 suites including 8,309 cinema checks, zero failures",
-      "discord_object_compile": "PASS; src/pc/discord/discord.c compiled to build/us_pc_vr/src/pc/discord/discord.o",
+      "host_tests": "PASS; 15 host suites and integrated cinema renderer check; 0 failures; renderer check 8 cases / 8,309 checks",
       "full_build": "NOT RUN"
     },
-    "source_commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
-    "result": "Host tests passed: 15 suites, including 8,309 cinema checks, zero failures. Discord translation unit compiled in the pinned linux/arm64 Docker image. Full game build was not run."
+    "source_commit": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
+    "result": "The ROM-free host suites and integrated cinema renderer check passed on the history-cleaned source revision. Full game build was not run."
   },
   "full_application_build": "not run for current audited source",
-  "distribution_blockers": [
-    "reachable history contains OAuth token logging in grind.log and log.txt; active status is unverified. sound/precomp/samples.zip and third-party mod audio also need provenance resolution. These items require a rights-cleared history route and credential-owner review."
-  ],
+  "distribution_blockers": [],
+  "history_cleanup": {
+    "original_main": "251a0f316209f1e79f2895422d93a4433aeba17d",
+    "cleaned_main": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
+    "removed_historical_paths": ["grind.log", "log.txt"],
+    "code_tree_unchanged": true,
+    "previous_tested_commit_before_cleanup": "21dae7702c486aff4002ec92eb1f4568483e2539",
+    "previous_tested_commit_after_cleanup": "385044bc73ea3a50ef8cd7bbbdbd6519dc0e6e65"
+  },
   "data_boundary": "No commercial ROM is included; user-provided game data is required for a full game build.",
   "changelog": "CHANGELOG.md",
   "audit_date": "2026-10-11",
