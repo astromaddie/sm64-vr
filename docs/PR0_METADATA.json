@@ -2,7 +2,7 @@
   "schema_version": 1,
   "milestone": "PR0",
   "status": "EXPERIMENTAL",
-  "publication_status": "prepared for public experimental source after OAuth-history cleanup",
+  "publication_status": "public experimental source after OAuth-history cleanup; no binary release",
   "audited_commit": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
   "source_tree": "0f54bea629ef4c7e84e02fb03c9487f40718704a",
   "branch": "main",
@@ -28,7 +28,10 @@
   "history_cleanup": {
     "original_main": "251a0f316209f1e79f2895422d93a4433aeba17d",
     "cleaned_main": "92a0b450b4b2a14cd0e15133f43f33bd712a1a78",
-    "removed_historical_paths": ["grind.log", "log.txt"],
+    "removed_historical_paths": [
+      "grind.log",
+      "log.txt"
+    ],
     "code_tree_unchanged": true,
     "previous_tested_commit_before_cleanup": "21dae7702c486aff4002ec92eb1f4568483e2539",
     "previous_tested_commit_after_cleanup": "385044bc73ea3a50ef8cd7bbbdbd6519dc0e6e65"
@@ -37,5 +40,6 @@
   "changelog": "CHANGELOG.md",
   "audit_date": "2026-10-11",
   "audit_details": "docs/PR0_READINESS.md",
-  "license_scope": "Retained component notices apply to their stated code; they do not grant redistribution rights to commercial ROMs, extracted media, saves or proprietary libraries."
+  "license_scope": "Retained component notices apply to their stated code; they do not grant redistribution rights to commercial ROMs, extracted media, saves or proprietary libraries.",
+  "publication_date": "2026-10-11"
 }

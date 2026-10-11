@@ -1,6 +1,6 @@
 # PR0 — sm64-vr
 
-**EXPERIMENTAL.** This personal fork is ready to publish as source after removing old OAuth logs from its history. See the [README](../README.md) for the port's features, controls, game-data requirements and build instructions.
+**EXPERIMENTAL.** This personal fork is public as experimental source, with old OAuth logs removed from its history. See the [README](../README.md) for the port's features, controls, game-data requirements and build instructions.
 
 | Record | Revision |
 | --- | --- |
