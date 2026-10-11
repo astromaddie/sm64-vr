@@ -4,4 +4,4 @@
 
 - Prepared this experimental personal fork for public source publication after removing OAuth-token-containing `grind.log` and `log.txt` from reachable `main` history.
 - Recorded the history-cleaned source revision and current ROM-free host test results.
-- Kept commercial game data out of the repository and preserved upstream/component notices.
+- Kept the supplied ROM and local build outputs out of the repository and preserved upstream/component notices.
