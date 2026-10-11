@@ -3,6 +3,9 @@
   "milestone": "PR0",
   "status": "EXPERIMENTAL",
   "publication_status": "private preparation; no release published",
+  "audited_commit": "47df66e35a3ac97d68069e10007025d2119ba6a0",
+  "current_checkout_commit": "47df66e35a3ac97d68069e10007025d2119ba6a0",
+  "branch": "main",
   "tested_commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
   "supported_targets": [
     "Linux ARM64 / SteamLinuxRuntime_4-arm64 / SteamVR OpenXR"
@@ -19,16 +22,17 @@
       "host_tests": "PASS; tests/vr/run_all.sh; 15 suites including 8,309 cinema checks, zero failures",
       "discord_object_compile": "PASS; src/pc/discord/discord.c compiled to build/us_pc_vr/src/pc/discord/discord.o",
       "full_build": "NOT RUN"
-    }
+    },
+    "source_commit": "21dae7702c486aff4002ec92eb1f4568483e2539",
+    "result": "Host tests passed: 15 suites, including 8,309 cinema checks, zero failures. Discord translation unit compiled in the pinned linux/arm64 Docker image. Full game build was not run."
   },
-  "full_application_build": "not run for PR0",
-  "focused_headset_acceptance": "pending for a clean candidate; historical results are documented separately",
-  "sustained_worn_performance": "unmeasured on current candidate",
+  "full_application_build": "not run for current audited source",
   "distribution_blockers": [
-    "Commercial-source license unresolved",
-    "Historical OAuth log blobs require credential review and authorized history cleanup",
-    "Historical audio provenance unresolved"
+    "reachable history contains OAuth token logging in grind.log and log.txt; active status is unverified. sound/precomp/samples.zip and third-party mod audio also need provenance resolution. These items require a rights-cleared history route and credential-owner review."
   ],
-  "license_scope": "Retained component notices apply to their stated code; they do not grant redistribution rights to commercial ROMs, extracted media, saves or proprietary libraries.",
-  "changelog": "README.md#pr0-changelog"
+  "data_boundary": "No commercial ROM is included; user-provided game data is required for a full game build.",
+  "changelog": "CHANGELOG.md",
+  "audit_date": "2026-10-11",
+  "audit_details": "docs/PR0_READINESS.md",
+  "license_scope": "Retained component notices apply to their stated code; they do not grant redistribution rights to commercial ROMs, extracted media, saves or proprietary libraries."
 }
