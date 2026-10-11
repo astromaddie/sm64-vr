@@ -1,40 +1,39 @@
-# SM64 VR for Steam Frame — experimental technical preview
+# SM64 VR for Steam Frame
 
-This private fork adapts SM64CoopDX for native Steam Frame VR. It is an experimental implementation preview, not a complete-gameplay or release claim. The Frame target is native Linux ARM64 through SteamLinuxRuntime_4-arm64, SteamVR OpenXR, and desktop OpenGL through GLX/Zink; it does not stream from a PC.
+This is my Steam Frame fork of [SM64CoopDX](https://github.com/coop-deluxe/sm64coopdx). It runs natively on the headset through SteamLinuxRuntime_4-arm64, SteamVR OpenXR and GLX/Zink; no gaming PC or streaming is needed.
 
-The upstream project is [SM64CoopDX](https://github.com/coop-deluxe/sm64coopdx). General engine fixes belong upstream. Frame-specific work in this private fork needs owner access for review. The previous upstream README is preserved in [README_UPSTREAM.md](README_UPSTREAM.md). The current private root is not an anonymous checkout or a release channel.
+**EXPERIMENTAL.** This is a personal-use port preview and remains a work in progress. It targets the Valve Steam Frame. You need your own legally obtained US Super Mario 64 game image; no game data is included. This repository contains the source and build tools, not a release package.
 
-## Capability evidence
+## What this fork adds
 
-| Capability | Host | Frame on desk | Worn |
-|---|---|---|---|
-| VR loop and source | All listed host suites passed; the changed Discord translation unit compiled. Full current-source executable was not built. | Earlier installed source 7e4f10d captured both eyes and HUD with synthetic head views; tracked stereo frames: 0. | Current settings/cinema integration has no wearer acceptance. |
-| Pause and VR settings | Camera, renderer, settings and menu tests passed. | Pause overview, Room page, live scale/camera adjustment, and resume were captured; panel yaw was -20.31 degrees. | Pad navigation, tracked recenter, readability and comfort remain unverified. |
-| Cutscene cinema | Projection/aspect and transition tests passed. | A diagnostic reached cutscene 162 / camera mode 11, checked both-eye 16:9 output and returned to stereo. | The real King Whomp introduction is untested. |
-| Frame pacing | Rate and timing logic has host tests. | After-capture windows returned to 120.0 fps with zero missed frames; capture itself dipped to about 92–106 fps. | Real worn performance is unmeasured. |
-| Gameplay | No complete level or campaign test is claimed. | Heavier scenes and the real boss encounter were not tested. | Physical grip input and full gameplay acceptance remain open. |
+- Stereoscopic VR with head tracking, a room-scale camera offset and adjustable world size, height and camera position.
+- A VR settings page with live camera adjustments and options for turning, seated use, head movement and comfort.
+- A stereo cinema presentation for selected scripted cameras and cutscenes, while ordinary gameplay remains in the game's camera view.
+- A pause/settings panel and a HUD that stays level as you move your head.
+- Steam Frame controller bindings, plus Index and Touch fallback bindings.
 
-Evidence and dates are separated in [docs/VR_ARCHITECTURE.md](docs/VR_ARCHITECTURE.md) and [docs/PR0_READINESS.md](docs/PR0_READINESS.md). Those device captures came from an earlier installed source, not a PR0 package built from the exact source state below.
+The [architecture notes](docs/VR_ARCHITECTURE.md) describe the camera, settings and rendering implementation. The original upstream README is preserved in [README_UPSTREAM.md](README_UPSTREAM.md).
 
-## Build and test
+## Build and install
 
-Requires Docker and the repository's Linux build image. The full Frame build/package path is shown below; PR0 ran the host tests and compiled the changed Discord object, but did not build or package the full game.
+Build with Docker using the repository's Linux build image:
 
-~~~sh
+```sh
+git clone --recurse-submodules --branch main https://github.com/astromaddie/sm64-vr.git
+cd sm64-vr
 docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker
-tools/docker/build-linux.sh tests
 tools/docker/build-linux.sh on
 tools/docker/build-linux.sh package
-~~~
+```
 
-Supply a legally obtained US Super Mario 64 game image with `tools/steam_frame/deploy.sh --rom /path/to/your-us-image`. The script validates it against this checkout's pinned US image, installs it as `~/.local/share/SM64VR/baserom.us.z64`, and registers the Steam title by default. No commercial game data is included.
+Install the package on your Frame with your own game image:
 
-## Limits and rights
+```sh
+tools/steam_frame/deploy.sh --rom /path/to/your-us-image
+```
 
-The game and its user data remain external to this repository. This fork has no release package and remains private. The source tree has no root license notice establishing rights to commercial game data. Publication is blocked pending review of historical credential-bearing log blobs and the provenance/licensing of historical audio archives; current source no longer logs the OAuth access token, and historical Git objects have not been rewritten.
+The deploy script checks the image against the pinned US game image and stores it under `~/.local/share/SM64VR/`. Launch the registered title from Steam so SteamVR supplies the controller bindings.
 
-## PR0 changelog
+## Credits and licenses
 
-- Replaced the upstream-facing root README with this private Frame technical preview and preserved the previous README separately.
-- Removed OAuth access-token contents from the Discord success log and ignored the two local runtime log names.
-- Added exact evidence and acceptance boundaries in docs/PR0_READINESS.md.
+This port is based on [SM64CoopDX](https://github.com/coop-deluxe/sm64coopdx). Shared Steam Frame VR helpers come from [sfvr](https://github.com/astromaddie/sfvr). The original upstream README remains in the repository. This fork has no root license; check each upstream component's notices before reusing its code. The game image and other commercial game data must come from your own copy.

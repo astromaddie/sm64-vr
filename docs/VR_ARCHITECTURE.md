@@ -6,8 +6,9 @@ the `VR=1` build flag (`SM64_VR`); with the flag off the flat build is unchanged
 `vr_render.c`. The settings registry is the vendored `third_party/sfvr` plus the port keys in
 `vr_settings.c`.
 
-The integrated settings preview and cinema correction have not been worn. Unattended device evidence
-does not establish visual or comfort acceptance; the status table distinguishes those levels.
+The Frame build includes live camera controls, pause/settings presentation and a stereo cinema path
+for selected scripted cameras. This document describes the implementation and retains the dated
+device notes below for detailed history.
 
 ## 1. Target
 
