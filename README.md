@@ -1,22 +1,40 @@
-![sm64coopdx Logo](textures/segment2/custom_coopdx_logo.rgba32.png)
+# SM64 VR for Steam Frame — experimental technical preview
 
-sm64coopdx is an online multiplayer project for the Super Mario 64 PC port that synchronizes all entities and every level for multiple players. The project was started by the Coop Deluxe Team. The purpose is to actively maintain and improve, but also continue sm64ex-coop, created by djoslin0. More features, customization, and power to the Lua API allow modders and players to enjoy Super Mario 64 more than ever!
+This private fork adapts SM64CoopDX for native Steam Frame VR. It is an experimental implementation preview, not a complete-gameplay or release claim. The Frame target is native Linux ARM64 through SteamLinuxRuntime_4-arm64, SteamVR OpenXR, and desktop OpenGL through GLX/Zink; it does not stream from a PC.
 
-Feel free to report bugs or contribute to the project.
+The upstream project is [SM64CoopDX](https://github.com/coop-deluxe/sm64coopdx). General engine fixes belong upstream. Frame-specific work in this private fork needs owner access for review. The previous upstream README is preserved in [README_UPSTREAM.md](README_UPSTREAM.md). The current private root is not an anonymous checkout or a release channel.
 
-## Initial Goal (Accomplished)
-Create a mod for the PC port where multiple people can play together online.
+## Capability evidence
 
-Unlike previous multiplayer projects, this one synchronizes enemies and events. This allows players to interact with the same world at the same time.
+| Capability | Host | Frame on desk | Worn |
+|---|---|---|---|
+| VR loop and source | All listed host suites passed; the changed Discord translation unit compiled. Full current-source executable was not built. | Earlier installed source 7e4f10d captured both eyes and HUD with synthetic head views; tracked stereo frames: 0. | Current settings/cinema integration has no wearer acceptance. |
+| Pause and VR settings | Camera, renderer, settings and menu tests passed. | Pause overview, Room page, live scale/camera adjustment, and resume were captured; panel yaw was -20.31 degrees. | Pad navigation, tracked recenter, readability and comfort remain unverified. |
+| Cutscene cinema | Projection/aspect and transition tests passed. | A diagnostic reached cutscene 162 / camera mode 11, checked both-eye 16:9 output and returned to stereo. | The real King Whomp introduction is untested. |
+| Frame pacing | Rate and timing logic has host tests. | After-capture windows returned to 120.0 fps with zero missed frames; capture itself dipped to about 92–106 fps. | Real worn performance is unmeasured. |
+| Gameplay | No complete level or campaign test is claimed. | Heavier scenes and the real boss encounter were not tested. | Physical grip input and full gameplay acceptance remain open. |
 
-Interestingly enough though, the goal of the project has slowly evolved over time from simply just making a Super Mario 64 multiplayer mod to constantly maintaining and improving the project (notably the Lua API.)
+Evidence and dates are separated in [docs/VR_ARCHITECTURE.md](docs/VR_ARCHITECTURE.md) and [docs/PR0_READINESS.md](docs/PR0_READINESS.md). Those device captures came from an earlier installed source, not a PR0 package built from the exact source state below.
 
-## Documentation
+## Build and test
 
-sm64coopdx is moddable via Lua, similar to Roblox and Garry's Mod's Lua APIs. To get started, click [here](docs/lua/lua.md) to see the Lua documentation. If you want to contribute to the repo, you can view the C documentation [here](docs/c/c.md).
+Requires Docker and the repository's Linux build image. The full Frame build/package path is shown below; PR0 ran the host tests and compiled the changed Discord object, but did not build or package the full game.
 
-## Wiki
-The wiki is made using GitHub's wiki feature, you can go to the wiki tab or click [here](https://github.com/coop-deluxe/sm64coopdx/wiki).
+~~~sh
+docker build -t sm64-vr-linux -f tools/docker/linux.Dockerfile tools/docker
+tools/docker/build-linux.sh tests
+tools/docker/build-linux.sh on
+tools/docker/build-linux.sh package
+~~~
 
-## Community
-We have an official Discord server open to the public [here](https://discord.gg/TJVKHS4).
+Supply a legally obtained US Super Mario 64 game image with `tools/steam_frame/deploy.sh --rom /path/to/your-us-image`. The script validates it against this checkout's pinned US image, installs it as `~/.local/share/SM64VR/baserom.us.z64`, and registers the Steam title by default. No commercial game data is included.
+
+## Limits and rights
+
+The game and its user data remain external to this repository. This fork has no release package and remains private. The source tree has no root license notice establishing rights to commercial game data. Publication is blocked pending review of historical credential-bearing log blobs and the provenance/licensing of historical audio archives; current source no longer logs the OAuth access token, and historical Git objects have not been rewritten.
+
+## PR0 changelog
+
+- Replaced the upstream-facing root README with this private Frame technical preview and preserved the previous README separately.
+- Removed OAuth access-token contents from the Discord success log and ignored the two local runtime log names.
+- Added exact evidence and acceptance boundaries in docs/PR0_READINESS.md.

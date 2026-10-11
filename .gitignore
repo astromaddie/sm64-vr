@@ -61,6 +61,10 @@ build/*
 sm64_save_file.bin
 sm64config.txt
 
+# Local logs can contain private runtime data.
+grind.log
+log.txt
+
 # Assets. Generally ignored, but ones with "custom" in the name are fine.
 /levels/**/*.png
 /actors/**/*.png
