@@ -46,6 +46,17 @@
 // A VR comfort turn holds the Lakitu (default) camera's heading: it does not
 // swing back behind an idle Mario until he moves or the player turns it
 static u8 sVrTurnOwned = FALSE;
+// Manual camera (setting camera_auto_rotate off; docs/VR_ARCHITECTURE.md section 4): the heading
+// the default camera holds, from Mario to the camera, and the frame it was last kept on
+static u8 sVrManualValid = FALSE;
+static s16 sVrManualYaw = 0;
+static u32 sVrManualTimer = 0;
+
+void mode_lakitu_camera(struct Camera *c);
+
+static s32 vr_manual_camera(void) {
+    return gVrActive && gVrCamTurn.manual;
+}
 // The turn taken since the camera node was last rendered, and its pivot: the
 // node's previous position turns with it, so the interpolation does too
 static f32 sVrTurnApplied = 0.f;
@@ -1225,6 +1236,14 @@ void update_yaw_and_dist_from_c_up(UNUSED struct Camera *c) {
  */
 void mode_radial_camera(struct Camera *c) {
     if (!c) { return; }
+#ifdef SM64_VR
+    // Manual camera: the radial cameras turn about the area's centre as Mario moves, which
+    // cannot be held still. Use the Lakitu camera that trails him instead.
+    if (vr_manual_camera()) {
+        mode_lakitu_camera(c);
+        return;
+    }
+#endif
     Vec3f pos;
     UNUSED u8 unused1[8];
     s16 oldAreaYaw = sAreaYaw;
@@ -1307,6 +1326,14 @@ s32 update_outward_radial_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
  */
 void mode_outward_radial_camera(struct Camera *c) {
     if (!c) { return; }
+#ifdef SM64_VR
+    // Manual camera: the radial cameras turn about the area's centre as Mario moves, which
+    // cannot be held still. Use the Lakitu camera that trails him instead.
+    if (vr_manual_camera()) {
+        mode_lakitu_camera(c);
+        return;
+    }
+#endif
     Vec3f pos;
     s16 oldAreaYaw = sAreaYaw;
 
@@ -2204,6 +2231,17 @@ s16 update_default_camera(struct Camera *c) {
 
     handle_c_button_movement(c);
     vec3f_get_dist_and_angle(sMarioCamState->pos, c->pos, &dist, &pitch, &yaw);
+#ifdef SM64_VR
+    // Manual camera: the camera trails Mario on a leash, so its heading follows wherever he
+    // runs. Keep last frame's heading instead and put the camera back on it, so the wall
+    // checks below test the place it will be. C buttons, comfort turns and the wall avoidance
+    // still change it; a camera that did not run last frame starts from where it is.
+    s32 vrManual = vr_manual_camera();
+    if (vrManual && sVrManualValid && gGlobalTimer - sVrManualTimer <= 1) {
+        yaw = sVrManualYaw;
+        vec3f_set_dist_and_angle(sMarioCamState->pos, c->pos, dist, pitch, yaw);
+    }
+#endif
 
     // If C-Down is active, determine what distance the camera should be from Mario
     if (gCameraMovementFlags & CAM_MOVE_ZOOMED_OUT) {
@@ -2345,6 +2383,12 @@ s16 update_default_camera(struct Camera *c) {
         if ((closeToMario & 1) && avoidStatus != 0) {
             yawVel = 0;
         }
+#ifdef SM64_VR
+        // Manual camera: never swing behind Mario (idle, or after he comes too close)
+        if (vrManual) {
+            yawVel = 0;
+        }
+#endif
         if (yawVel != 0 && get_dialog_id() == -1) {
             camera_approach_s16_symmetric_bool(&yaw, yawGoal, yawVel);
         }
@@ -2493,6 +2537,11 @@ s16 update_default_camera(struct Camera *c) {
     if (gCameraUseCourseSpecificSettings && gCurrLevelArea == AREA_WDW_TOWN) {
         yaw = clamp_positions_and_find_yaw(c->pos, c->focus, 2254.f, -3789.f, 3790.f, -2253.f);
     }
+#ifdef SM64_VR
+    sVrManualValid = vrManual;
+    sVrManualYaw = yaw;
+    sVrManualTimer = gGlobalTimer;
+#endif
     return yaw;
 }
 
@@ -2504,6 +2553,12 @@ void mode_default_camera(struct Camera *c) {
     if (!c) { return; }
     set_fov_function(CAM_FOV_DEFAULT);
     c->nextYaw = update_default_camera(c);
+#ifdef SM64_VR
+    // Manual camera: no look-ahead toward where Mario faces (it turns the view)
+    if (vr_manual_camera()) {
+        return;
+    }
+#endif
     pan_ahead_of_player(c);
 }
 
@@ -3104,6 +3159,9 @@ static s32 vr_turn_kind(struct Camera *c) {
         case CAMERA_MODE_OUTWARD_RADIAL:
             // Not while the radial camera swings itself (C buttons, the
             // rotating floors, the return from C-up): those set sModeOffsetYaw
+            if (vr_manual_camera()) {
+                return VR_TURN_KIND_DEFAULT; // run as the Lakitu camera (mode_radial_camera)
+            }
             if (gCameraMovementFlags & (CAM_MOVING_INTO_MODE | CAM_MOVE_ROTATE)) {
                 return VR_TURN_KIND_NONE;
             }
@@ -3198,6 +3256,7 @@ static void vr_camera_take_turn(struct Camera *c) {
         s8DirModeYawOffset += units;
     } else {
         sVrTurnOwned = TRUE;
+        sVrManualYaw += units;
     }
     sVrTurnApplied += turn;
     vec3f_copy(sVrTurnAppliedPivot, pivot);
@@ -3280,6 +3339,17 @@ void update_lakitu(struct Camera *c) {
             vec3f_set(sPlayer2FocusOffset, 0, 0, 0);
         }
 
+#ifdef SM64_VR
+        // Manual camera: Lakitu's position trails more slowly than his focus, so the view
+        // swings while Mario runs sideways. Keep his distance and height, on the held heading.
+        if (vr_manual_camera() && sVrManualValid && sVrManualTimer == gGlobalTimer && !c->cutscene) {
+            f32 dx = gLakituState.pos[0] - gLakituState.focus[0];
+            f32 dz = gLakituState.pos[2] - gLakituState.focus[2];
+            f32 r = sqrtf(dx * dx + dz * dz);
+            gLakituState.pos[0] = gLakituState.focus[0] + r * sins(sVrManualYaw);
+            gLakituState.pos[2] = gLakituState.focus[2] + r * coss(sVrManualYaw);
+        }
+#endif
         vec3f_get_dist_and_angle(gLakituState.pos, gLakituState.focus, &gLakituState.focusDistance,
                                  &gLakituState.oldPitch, &gLakituState.oldYaw);
 

@@ -66,7 +66,7 @@ static void test_table(void) {
 	// the keys the page is built for that this tree has are present
 	const char *have[] = {
 		"turn_mode", "snap_angle", "smooth_turn_speed", "vignette", "vignette_strength", "move_relative",
-		"camera_shake", "dominant_hand", "defaults_profile", "haptics", "hud_visible", "hud_distance", "hud_scale", "panel_distance",
+		"camera_shake", "camera_auto_rotate", "dominant_hand", "defaults_profile", "haptics", "hud_visible", "hud_distance", "hud_scale", "panel_distance",
 		"resolution_scale", "refresh_rate", "world_scale", "star_select_scale", "height_offset", "seated",
 		"head_translation"
 	};

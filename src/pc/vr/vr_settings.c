@@ -39,6 +39,9 @@ static const sfvr_setting_key port_keys[] = {
 	// The anchor drops the game camera's pitch: looking level in the headset is
 	// level in the game, and the head supplies pitch.
 	{ "level_pitch", SFVR_SETTING_BOOL, 1.0, 0.0, 1.0, NULL },
+	// Off: the camera turns only when the wearer turns it (right stick, C buttons). Lakitu
+	// stops swinging behind Mario and following where he runs; walls still turn and stop him.
+	{ "camera_auto_rotate", SFVR_SETTING_BOOL, 1.0, 0.0, 1.0, NULL },
 	// Game units per metre on the star select screen. Its camera sits about
 	// 1300 units from the star row: at 300 the row reads as a diorama about
 	// 4 m away rather than 1.5 m stars 12 m away at life size.

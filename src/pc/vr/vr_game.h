@@ -71,6 +71,8 @@ struct VrCamTurn {
     bool move_active;
     float move_yaw;
     bool no_shake;
+    // camera_auto_rotate off: the camera turns only when the wearer turns it (camera.c)
+    bool manual;
 };
 extern struct VrCamTurn gVrCamTurn;
 

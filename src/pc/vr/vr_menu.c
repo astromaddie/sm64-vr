@@ -37,6 +37,7 @@ static const vr_menu_entry_t entries[] = {
 	CHOICE_ENUM("move_relative", "Move relative to", VR_TAB_COMFORT, move_relative_choices),
 	CHOICE_ENUM("cutscenes", "Cutscenes", VR_TAB_COMFORT, cutscene_choices),
 	TOGGLE("camera_shake", "Camera shake", VR_TAB_COMFORT),
+	TOGGLE("camera_auto_rotate", "Auto camera turning", VR_TAB_COMFORT),
 
 	// 2 Controls
 	CHOICE_ENUM("dominant_hand", "Dominant hand", VR_TAB_CONTROLS, hand_choices),

@@ -102,6 +102,22 @@ by the ordinary recentre. Switching `seated` on takes the height at once (the he
 horizontal origin and a held menu stay), so the settings page shows what it does. Menu is the game's Start; a short View press is the gamepad Back (the player
 list in online play; SM64 itself has no Select).
 
+**Manual camera (`camera_auto_rotate` off; settings page, Comfort: "Auto camera turning").** Lakitu
+turns on his own in four ways: the default camera trails Mario on a leash (its heading is re-read
+from where the camera is each update, `update_default_camera`), it swings behind an idle Mario and
+away when he comes within 250 units, `pan_ahead_of_player` looks toward where he faces, and
+Lakitu's shown position trails more slowly than his focus (`update_lakitu`, 0.3 against 0.8). With
+the setting off (`gVrCamTurn.manual`, set each frame in `comfort_refresh`), `camera.c` keeps last
+update's heading and puts the camera back on it before the wall checks, zeroes the swing, skips
+the pan, and puts Lakitu's shown position on the held heading at his own distance and height. The
+radial and outward radial cameras turn about the area's centre as Mario moves, which cannot be
+held still, so they run as the Lakitu camera (`mode_lakitu_camera`) and take turns without limits.
+What still turns the camera: comfort turns, C-left/C-right, the wall avoidance
+(`rotate_camera_around_walls`, obstructed view only) and the door exit. `collide_with_walls` and
+the floor and ceiling checks are untouched. The 8-direction camera already had no drift. Cameras
+that follow Mario's facing by design (swimming, flying, slides, the cannon), boss, fixed and
+scripted cameras are unchanged.
+
 **Turning (`turn_mode`, `snap_angle`, `smooth_turn_speed`).** Right stick X, through the sfvr turn helper:
 a 30 degree snap at 70% deflection that re-arms below 30% (15 to 90 degrees), or smooth turning at up to
 120 degrees per second past a 20% deadzone. SM64's camera eases to a new yaw (Lakitu flies a chord to his
@@ -213,6 +229,7 @@ Comfort keys (section 4; all live):
 | `seated` | off | |
 | `head_translation` | 1.0 | 0 to 2 |
 | `camera_shake` | off | |
+| `camera_auto_rotate` | on | Off: Lakitu turns only when the wearer turns him (section 4, "Manual camera") |
 | `level_pitch` | on | |
 | `diag_turn_stick` | 0 (off) | -1 to 1, config and env only |
 | `settings_page_side` | `right` | `right`, `left`, `centre` (section 10) |
@@ -305,6 +322,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | Stick relative to the view and the head or a hand (`move_relative`); C-left/C-right on the D-pad | pure test (direction maths); input mapping unrun |
 | `world_scale` 20 to 416, signed `camera_closer` / `camera_lower`, height and IPD | pure tests; LOS constraint exercised through the production camera function |
 | Recentre keeps the standing height; View held 3 s, focus and `seated` take it | pure test |
+| Manual camera (`camera_auto_rotate` off) | pure tests (key registered, page row); ARM64 VR build and package; not run on the device, headset-unverified |
 | Vignette on artificial rotation (ramp), `camera_shake` off | pure test (ramp); drawing and the shake hook unrun |
 | `[vr-cam]` logs and `diag_turn_stick` | verified unattended 2026-10-06 |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |

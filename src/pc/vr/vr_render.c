@@ -835,6 +835,7 @@ static void comfort_refresh(void) {
     vrr.seated_seen = true;
     vrr.seated_prev = vrr.comfort.seated;
     gVrCamTurn.no_shake = !vrr.comfort.camera_shake;
+    gVrCamTurn.manual = vr_settings_get(vr_settings(), "camera_auto_rotate") == 0.0;
 }
 
 // Once per frame, before the eyes: the stick's turn into the queue, then the
