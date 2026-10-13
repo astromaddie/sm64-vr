@@ -58,6 +58,9 @@ static const vr_menu_entry_t entries[] = {
 	SLIDER("resolution_scale", "Resolution (restart)", VR_TAB_DISPLAY, 0.75, 1.5, 0.05, 1, "%.2fx"),
 	CHOICE_VALUES("refresh_rate", "Rate (SteamVR wins)", VR_TAB_DISPLAY, refresh_choices, refresh_values),
 
+	SLIDER("phosphor", "CRT phosphors", VR_TAB_DISPLAY, 0, 100, 5, 100, "%.0f%%"),
+	SLIDER("phosphor_size", "Phosphor size", VR_TAB_DISPLAY, 0.15, 1.0, 0.05, 1, "%.2f deg"),
+
 	// 5 Accessibility and audio: nothing yet
 
 	// 6 Room

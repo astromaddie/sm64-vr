@@ -68,7 +68,7 @@ static void test_table(void) {
 		"turn_mode", "snap_angle", "smooth_turn_speed", "vignette", "vignette_strength", "move_relative",
 		"camera_shake", "camera_auto_rotate", "dominant_hand", "defaults_profile", "haptics", "hud_visible", "hud_distance", "hud_scale", "panel_distance",
 		"resolution_scale", "refresh_rate", "world_scale", "star_select_scale", "height_offset", "seated",
-		"head_translation"
+		"head_translation", "phosphor", "phosphor_size"
 	};
 	for (size_t i = 0; i < sizeof(have) / sizeof(have[0]); i++) {
 		const vr_menu_entry_t *e = find(have[i]);

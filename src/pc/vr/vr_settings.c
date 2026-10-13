@@ -82,7 +82,11 @@ static const sfvr_setting_key port_keys[] = {
 	// Diagnostic: after this many seconds of gameplay, pause, open the pause menu and
 	// the VR settings page, step world_scale and camera_closer and put them back,
 	// close and resume, with a named dump at each stage. 0 = off.
-	{ "diag_settings_preview", SFVR_SETTING_FLOAT, 0.0, 0.0, 600.0, NULL }
+	{ "diag_settings_preview", SFVR_SETTING_FLOAT, 0.0, 0.0, 600.0, NULL },
+	// CRT phosphor mask over the stereo world eyes (docs/VR_ARCHITECTURE.md section 4):
+	// strength 0..1, default 0.5, 0 = off; a triad's width in degrees. Live.
+	{ "phosphor", SFVR_SETTING_FLOAT, 0.5, 0.0, 1.0, NULL },
+	{ "phosphor_size", SFVR_SETTING_FLOAT, 0.25, 0.15, 1.0, NULL }
 };
 #define PORT_KEY_COUNT (sizeof(port_keys) / sizeof(port_keys[0]))
 

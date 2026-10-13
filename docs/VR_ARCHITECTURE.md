@@ -188,6 +188,24 @@ clear). `camera_shake` (off) leaves out Lakitu's shakes (`update_lakitu`: pitch,
 shake). `head_translation` (1.0) and `level_pitch` as above. `horizon_lock`, `follow_vehicle_rotation`,
 `roomscale`, `lean_limit` and `duck_crouch` do not apply (no vehicles, no first-person body).
 
+**Phosphor mask.** `phosphor` (0 to 1, on at 0.5 by default; 0 = off) and `phosphor_size` (a red-green-blue
+triad's width in degrees, 0.25 by default, 0.15 to 1.0) put the stripes and scanlines of a tube over the eye
+images. The mask cannot be per pixel: the two eyes' images are not mirror images, so a pixel-locked pattern
+would float at no depth. It is read from the direction a pixel looks in, in the room: the eye's orientation
+in the room (the pose submitted to OpenXR for it, `vrr.views[e]`) applied to the pixel's tangent ray from that
+eye's fov edges. Both eyes then see the same stripe the same way and it stays put when the head turns.
+`heading = atan2(x, -z)` drives three cosine stripes (R, G, B, a third of a triad apart); `height = y /
+sqrt(x^2 + z^2)` drives scanlines, one every 1.5 triads, 65% deep; the mask is scaled by 2 to keep the average
+light, and `strength` mixes it with 1. The maths and its CPU mirror are `vr_phosphor.c` (host-tested in
+`tests/vr/test_vr_phosphor.c`). Eyes are rendered straight into the swapchain with no final draw, so it is one
+alpha-less full-screen pass per eye (`draw_phosphor` in `vr_render.c`): `glBlendFunc(GL_DST_COLOR, GL_ZERO)`,
+depth test and write off, drawn after the world pass and before the vignette; only the blend function, the
+VAO, the scissor and the depth mask are put back. It is skipped for the cinema eye views, and the HUD quad
+and the flat panel never get it. With `phosphor` at 0 no pass is drawn and the frame is as before. The eye
+images are gamma-encoded (sRGB swapchains, `GL_FRAMEBUFFER_SRGB` off), so the factor is the square root of the
+mask and it scales light, not code values. Status: pure tests and ARM64 build; not run on the device,
+headset-unverified.
+
 **Diagnostics.** `[vr-cam]` lines: every snap (shown and game camera heading, and whether the camera's limit
 cut it), a turn the camera could not take or that was ignored (at most one line in 2 s), and every 10 s the shown and game camera headings, the turn taken in all, the gate
 and the comfort values. `diag_turn_stick = D` holds right stick X at D for 4 s and releases it for 4 s in
@@ -219,6 +237,7 @@ Comfort keys (section 4; all live):
 | `snap_angle` | 30 | 15, 30, 45, 60, 90 |
 | `smooth_turn_speed` | 120 deg/s | 30 to 360 |
 | `vignette` / `vignette_strength` | off / 0.6 | 0 to 1 |
+| `phosphor` / `phosphor_size` | 0.5 / 0.25 deg | 0 to 1 (0 = off) / 0.15 to 1.0 |
 | `move_relative` | `head` | `head`, `left`, `right` |
 | `third_person_move` | `face_move` | `face_move` only |
 | `world_scale` | 104 units/m | 20 to 416 |
@@ -323,6 +342,7 @@ unit-tested (`tests/vr/test_vr_rate.c`, `test_vr_xr.c`). Heavier scenes (Bob-omb
 | `world_scale` 20 to 416, signed `camera_closer` / `camera_lower`, height and IPD | pure tests; LOS constraint exercised through the production camera function |
 | Recentre keeps the standing height; View held 3 s, focus and `seated` take it | pure test |
 | Manual camera (`camera_auto_rotate` off) | pure tests (key registered, page row); ARM64 VR build and package; not run on the device, headset-unverified |
+| Phosphor mask (`phosphor` on at 0.5 by default, `phosphor_size`) | pure tests (maths, constants, keys, page rows); ARM64 VR build and package; not run on the device, headset-unverified |
 | Vignette on artificial rotation (ramp), `camera_shake` off | pure test (ramp); drawing and the shake hook unrun |
 | `[vr-cam]` logs and `diag_turn_stick` | verified unattended 2026-10-06 |
 | Menus and HUD on the flat panel and HUD quad | headset-unverified |

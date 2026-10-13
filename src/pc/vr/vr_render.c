@@ -14,6 +14,7 @@
 #include "stb/stb_image_write.h"
 
 #include "vr_render.h"
+#include "vr_phosphor.h"
 #include "vr.h"
 #include "vr_cam.h"
 #include "vr_game.h"
@@ -128,6 +129,9 @@ static struct {
     bool play; // stereo gameplay through the game camera: turning, closer/lower and the stick frame apply
     GLuint vignette_program;
     GLint vignette_tan_loc, vignette_amount_loc, vignette_size_loc;
+    GLuint phosphor_program;
+    GLint phosphor_room_loc, phosphor_tan_loc, phosphor_shape_loc, phosphor_size_loc;
+    float phosphor, phosphor_size; // phosphor / phosphor_size, read live each frame
 
     // GPU time of the eye and HUD passes (timing on): timestamp pairs in a ring,
     // read back a few frames later so nothing waits (lesson 10, lesson 53)
@@ -262,6 +266,31 @@ static const char *const VIGNETTE_FS =
     "    frag_color = vec4(0.0, 0.0, 0.0, smoothstep(clear, clear + radians(12.0), angle));\n"
     "}\n";
 
+// The phosphor mask (phosphor, phosphor_size; vr_phosphor.h): multiplied onto
+// the eye image just drawn. Outputs the factor, alpha 1, for glBlendFunc
+// (GL_DST_COLOR, GL_ZERO). `room` is the eye's room-from-eye rotation, `tans`
+// its fov edge tangents (left, right, up, down), `shape` is triads a radian,
+// scanline rate (triads a radian / 1.5) and strength. The eye image is
+// gamma-encoded (sRGB swapchain, framebuffer sRGB off), so the factor is the
+// square root of the mask, as in the DK64 port.
+static const char *const PHOSPHOR_FS =
+    "#version 330 core\n"
+    "uniform mat3 room;\n"
+    "uniform vec4 tans;\n"
+    "uniform vec3 shape;\n"
+    "uniform vec2 size;\n"
+    "out vec4 frag_color;\n"
+    "void main(void) {\n"
+    "    vec2 uv = gl_FragCoord.xy / size;\n"
+    "    vec3 dir = room * vec3(mix(tans.x, tans.y, uv.x), mix(tans.w, tans.z, uv.y), -1.0);\n"
+    "    float heading = atan(dir.x, -dir.z);\n"
+    "    float height = dir.y * inversesqrt(max(dir.x * dir.x + dir.z * dir.z, 1e-6));\n"
+    "    vec3 stripe = 0.5 + 0.5 * cos(6.2831853 * (heading * shape.x - vec3(0.0, 1.0, 2.0) / 3.0));\n"
+    "    float scan = 0.5 + 0.5 * cos(6.2831853 * height * shape.y);\n"
+    "    vec3 mask = stripe * mix(1.0, scan, 0.65) * 2.0;\n"
+    "    frag_color = vec4(sqrt(mix(vec3(1.0), mask, shape.z)), 1.0);\n"
+    "}\n";
+
 static GLuint compile(GLenum type, const char *src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, NULL);
@@ -316,6 +345,23 @@ static void gl_make(void) {
         vrr.vignette_tan_loc = glGetUniformLocation(vrr.vignette_program, "tans");
         vrr.vignette_size_loc = glGetUniformLocation(vrr.vignette_program, "size");
         vrr.vignette_amount_loc = glGetUniformLocation(vrr.vignette_program, "amount");
+    }
+    GLuint pvs = compile(GL_VERTEX_SHADER, RESOLVE_VS);
+    GLuint pfs = compile(GL_FRAGMENT_SHADER, PHOSPHOR_FS);
+    vrr.phosphor_program = glCreateProgram();
+    glAttachShader(vrr.phosphor_program, pvs);
+    glAttachShader(vrr.phosphor_program, pfs);
+    glLinkProgram(vrr.phosphor_program);
+    ok = 0;
+    glGetProgramiv(vrr.phosphor_program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        vr_logf("render: the phosphor program did not link");
+        vrr.phosphor_program = 0;
+    } else {
+        vrr.phosphor_room_loc = glGetUniformLocation(vrr.phosphor_program, "room");
+        vrr.phosphor_tan_loc = glGetUniformLocation(vrr.phosphor_program, "tans");
+        vrr.phosphor_shape_loc = glGetUniformLocation(vrr.phosphor_program, "shape");
+        vrr.phosphor_size_loc = glGetUniformLocation(vrr.phosphor_program, "size");
     }
     glBindVertexArray((GLuint)vrr.game_vao);
     vrr.gl_ready = true;
@@ -627,6 +673,37 @@ static void draw_vignette(const float fov[4], uint32_t w, uint32_t h, float amou
     glDepthMask(GL_TRUE);
 }
 
+// Over the eye image just drawn (bound), stereo world eyes only, while
+// `phosphor` is above 0: one multiplicative full-screen pass. The eye's pose is
+// the one submitted to OpenXR for it (vrr.views), so the mask holds still in the room.
+static void draw_phosphor(const vr_view_t *view, uint32_t w, uint32_t h) {
+    if (!vrr.phosphor_program) {
+        return;
+    }
+    vr_phosphor_t p;
+    vr_phosphor_constants(view->pose.orientation, view->fov, vrr.phosphor_size, vrr.phosphor, &p);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_DST_COLOR, GL_ZERO);
+    glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+    glUseProgram(vrr.phosphor_program);
+    glUniformMatrix3fv(vrr.phosphor_room_loc, 1, GL_FALSE, p.room);
+    glUniform4f(vrr.phosphor_tan_loc, p.tan_left, p.tan_right, p.tan_up, p.tan_down);
+    glUniform3f(vrr.phosphor_shape_loc, p.triads_per_rad, p.triads_per_rad * VR_PHOSPHOR_SCAN_PER_TRIAD, p.strength);
+    glUniform2f(vrr.phosphor_size_loc, (float)w, (float)h);
+    glBindVertexArray(vrr.resolve_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glUseProgram(0);
+    // Only what this pass changed: the eye target stays bound for the vignette and the dump
+    glBindVertexArray((GLuint)vrr.game_vao);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_SCISSOR_TEST);
+    glDepthMask(GL_TRUE);
+}
+
 static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
     bool ok = true;
     for (int e = 0; e < 2; e++) {
@@ -656,6 +733,9 @@ static bool replay_eyes(Gfx *dl, vr_layers_t *layers) {
         gfx_vr_run_pass(dl, &pass);
         vrr.info.tris_eye[e] = gfx_vr_pass_stats()->tris_drawn;
         vrr.info.world_proj_loads[e] = gfx_vr_pass_stats()->world_proj_loads;
+        if (vrr.phosphor > 0.001f && !vrr.eye_ctx[e].cinema) {
+            draw_phosphor(&vrr.views[e], t.width, t.height);
+        }
         if (vrr.vignette > 0.001f) {
             draw_vignette(vrr.eye_ctx[e].fov, t.width, t.height, vrr.vignette);
         }
@@ -834,6 +914,8 @@ static void comfort_refresh(void) {
     }
     vrr.seated_seen = true;
     vrr.seated_prev = vrr.comfort.seated;
+    vrr.phosphor = (float)vr_settings_get(settings, "phosphor");
+    vrr.phosphor_size = (float)vr_settings_get(settings, "phosphor_size");
     gVrCamTurn.no_shake = !vrr.comfort.camera_shake;
     gVrCamTurn.manual = vr_settings_get(vr_settings(), "camera_auto_rotate") == 0.0;
 }

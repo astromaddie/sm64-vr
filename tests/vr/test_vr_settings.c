@@ -80,7 +80,7 @@ static void test_registry(void) {
 		"turn_mode", "snap_angle", "vignette", "seated", "haptics", "dominant_hand",
 		"smooth_turn_speed", "vignette_strength", "move_relative", "height_offset", "head_translation",
 		"camera_shake", "camera_closer", "camera_lower", "defaults_profile", "third_person_move", "diag_turn_stick",
-		"camera_auto_rotate"
+		"camera_auto_rotate", "phosphor", "phosphor_size"
 	};
 	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
 		CHECK(vr_settings_index(names[i]) >= 0);
@@ -88,7 +88,7 @@ static void test_registry(void) {
 	CHECK_INT(vr_settings_index("nonsense"), -1);
 	CHECK_INT(vr_settings_index(NULL), -1);
 	CHECK(vr_settings_count() <= VR_SETTINGS_MAX_KEYS);
-	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 23);
+	CHECK_INT(vr_settings_count(), sfvr_settings_count() + 25);
 
 	// env names
 	char name[64];
@@ -125,6 +125,8 @@ static void test_defaults_and_creation(void) {
 	CHECK_NEAR(get(&s, "resolution_scale"), 1.25, 1e-9); // about 2160 px an eye
 	CHECK_NEAR(get(&s, "refresh_rate"), 120, 1e-9);
 	CHECK_NEAR(get(&s, "world_scale"), 104, 1e-9);
+	CHECK_NEAR(get(&s, "phosphor"), 0.5, 1e-9);
+	CHECK_NEAR(get(&s, "phosphor_size"), 0.25, 1e-9);
 	CHECK_NEAR(get(&s, "force_mono"), 0, 1e-9);
 	CHECK_NEAR(get(&s, "panel_distance"), 2.0, 1e-9);
 	CHECK_NEAR(get(&s, "probe_seconds"), 0, 1e-9);

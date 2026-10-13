@@ -9,7 +9,7 @@ trap 'rm -f "$bin"' EXIT
 flags=(-std=c11 -D_GNU_SOURCE -Wall -Wextra -DSM64_VR -ffunction-sections -fdata-sections
 	-Isrc/pc/vr -Ithird_party/sfvr/include -Ithird_party/sfvr/tests -I/opt/openxr/include)
 pure=(src/pc/vr/vr_cam.c src/pc/vr/vr_cinema.c src/pc/vr/vr_clock.c src/pc/vr/vr_compose.c
-	src/pc/vr/vr_log.c src/pc/vr/vr_math.c src/pc/vr/vr_menu.c src/pc/vr/vr_paths.c src/pc/vr/vr_preview.c
+	src/pc/vr/vr_log.c src/pc/vr/vr_math.c src/pc/vr/vr_menu.c src/pc/vr/vr_paths.c src/pc/vr/vr_phosphor.c src/pc/vr/vr_preview.c
 	src/pc/vr/vr_rate.c src/pc/vr/vr_sched.c src/pc/vr/vr_settings.c src/pc/vr/vr_stage.c
 	src/pc/vr/vr_turn.c src/pc/vr/vr_xr.c src/pc/vr/vr_perf.c third_party/sfvr/src/*.c)
 failed=0
