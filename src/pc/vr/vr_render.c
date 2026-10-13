@@ -267,8 +267,9 @@ static const char *const VIGNETTE_FS =
     "}\n";
 
 // The phosphor mask (phosphor, phosphor_size; vr_phosphor.h): multiplied onto
-// the eye image just drawn. Outputs the factor, alpha 1, for glBlendFunc
-// (GL_DST_COLOR, GL_ZERO). `room` is the eye's room-from-eye rotation, `tans`
+// the eye image just drawn. The factor reaches 1.41 and a normalised target clamps
+// what the shader writes to 1, so it outputs half the factor for a blend of
+// dst * src + dst * src (GL_DST_COLOR, GL_SRC_COLOR), alpha left alone. `room` is the eye's room-from-eye rotation, `tans`
 // its fov edge tangents (left, right, up, down), `shape` is triads a radian,
 // scanline rate (triads a radian / 1.5) and strength. The eye image is
 // gamma-encoded (sRGB swapchain, framebuffer sRGB off), so the factor is the
@@ -288,7 +289,7 @@ static const char *const PHOSPHOR_FS =
     "    vec3 stripe = 0.5 + 0.5 * cos(6.2831853 * (heading * shape.x - vec3(0.0, 1.0, 2.0) / 3.0));\n"
     "    float scan = 0.5 + 0.5 * cos(6.2831853 * height * shape.y);\n"
     "    vec3 mask = stripe * mix(1.0, scan, 0.65) * 2.0;\n"
-    "    frag_color = vec4(sqrt(mix(vec3(1.0), mask, shape.z)), 1.0);\n"
+    "    frag_color = vec4(0.5 * sqrt(mix(vec3(1.0), mask, shape.z)), 1.0);\n"
     "}\n";
 
 static GLuint compile(GLenum type, const char *src) {
@@ -687,7 +688,7 @@ static void draw_phosphor(const vr_view_t *view, uint32_t w, uint32_t h) {
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_DST_COLOR, GL_ZERO);
+    glBlendFuncSeparate(GL_DST_COLOR, GL_SRC_COLOR, GL_ZERO, GL_ONE);
     glViewport(0, 0, (GLsizei)w, (GLsizei)h);
     glUseProgram(vrr.phosphor_program);
     glUniformMatrix3fv(vrr.phosphor_room_loc, 1, GL_FALSE, p.room);

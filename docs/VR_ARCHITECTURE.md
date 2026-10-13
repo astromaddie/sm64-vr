@@ -198,7 +198,7 @@ eye's fov edges. Both eyes then see the same stripe the same way and it stays pu
 sqrt(x^2 + z^2)` drives scanlines, one every 1.5 triads, 65% deep; the mask is scaled by 2 to keep the average
 light, and `strength` mixes it with 1. The maths and its CPU mirror are `vr_phosphor.c` (host-tested in
 `tests/vr/test_vr_phosphor.c`). Eyes are rendered straight into the swapchain with no final draw, so it is one
-alpha-less full-screen pass per eye (`draw_phosphor` in `vr_render.c`): `glBlendFunc(GL_DST_COLOR, GL_ZERO)`,
+alpha-less full-screen pass per eye (`draw_phosphor` in `vr_render.c`): `glBlendFuncSeparate(GL_DST_COLOR, GL_SRC_COLOR, GL_ZERO, GL_ONE)` with the shader writing half the factor (the factor reaches 1.41 and the target clamps at 1),
 depth test and write off, drawn after the world pass and before the vignette; only the blend function, the
 VAO, the scissor and the depth mask are put back. It is skipped for the cinema eye views, and the HUD quad
 and the flat panel never get it. With `phosphor` at 0 no pass is drawn and the frame is as before. The eye
