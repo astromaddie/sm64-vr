@@ -1240,6 +1240,8 @@ void mode_radial_camera(struct Camera *c) {
     // Manual camera: the radial cameras turn about the area's centre as Mario moves, which
     // cannot be held still. Use the Lakitu camera that trails him instead.
     if (vr_manual_camera()) {
+        // The return from C-up is this mode's own blend; do not leave it pending
+        gCameraMovementFlags &= ~CAM_MOVING_INTO_MODE;
         mode_lakitu_camera(c);
         return;
     }
@@ -1330,6 +1332,8 @@ void mode_outward_radial_camera(struct Camera *c) {
     // Manual camera: the radial cameras turn about the area's centre as Mario moves, which
     // cannot be held still. Use the Lakitu camera that trails him instead.
     if (vr_manual_camera()) {
+        // The return from C-up is this mode's own blend; do not leave it pending
+        gCameraMovementFlags &= ~CAM_MOVING_INTO_MODE;
         mode_lakitu_camera(c);
         return;
     }
@@ -3342,7 +3346,8 @@ void update_lakitu(struct Camera *c) {
 #ifdef SM64_VR
         // Manual camera: Lakitu's position trails more slowly than his focus, so the view
         // swings while Mario runs sideways. Keep his distance and height, on the held heading.
-        if (vr_manual_camera() && sVrManualValid && sVrManualTimer == gGlobalTimer && !c->cutscene) {
+        if (vr_manual_camera() && sVrManualValid && sVrManualTimer == gGlobalTimer && !c->cutscene
+            && sModeTransition.framesLeft <= 0) {
             f32 dx = gLakituState.pos[0] - gLakituState.focus[0];
             f32 dz = gLakituState.pos[2] - gLakituState.focus[2];
             f32 r = sqrtf(dx * dx + dz * dz);
